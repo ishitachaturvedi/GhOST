@@ -1,0 +1,7 @@
+Error for command "exec": requires at least 2 arg(s), only received 1
+
+Usage:
+  singularity [global options...] exec [exec options...] <container> <command>
+
+Run 'singularity --help' for more detailed usage information.
+/bin/bash: error reading input file: Bad file descriptor

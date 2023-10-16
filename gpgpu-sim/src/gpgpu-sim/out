@@ -1,0 +1,10 @@
+perl: warning: Setting locale failed.
+perl: warning: Please check that your locale settings:
+	LANGUAGE = (unset),
+	LC_ALL = (unset),
+	LANG = "en_US.UTF-8"
+    are supported and installed on your system.
+perl: warning: Falling back to the standard locale ("C").
+Makefile:106: /gpgpu-sim/Makefile.makedepend: No such file or directory
+touch: cannot touch '/gpgpu-sim/Makefile.makedepend': No such file or directory
+make: *** [depend] Error 1

@@ -1,0 +1,78 @@
+Bus error
+Bus error
+Bus error
+Bus error
+Bus error
+Bus error
+mcpat.mk:105: /scratch/gpfs/ishitac/gpgpusim-codes/ISCA_GPGPUSIM/gpgpu-sim_distribution/build/gcc-/cuda-/release/accelwattch/Makefile.makedepend: No such file or directory
+Bus error
+Bus error
+Bus error
+Bus error
+Bus error
+Makefile:150: /scratch/gpfs/ishitac/gpgpusim-codes/ISCA_GPGPUSIM/gpgpu-sim_distribution/build/gcc-/cuda-/release/cuda-sim/Makefile.makedepend: No such file or directory
+cacti.mk:65: /scratch/gpfs/ishitac/gpgpusim-codes/ISCA_GPGPUSIM/gpgpu-sim_distribution/build/gcc-/cuda-/release/accelwattch/cacti/Makefile.makedepend: No such file or directory
+Bus error
+Bus error
+Bus error
+Bus error
+Bus error
+ptxinfo.y: warning: 2 reduce/reduce conflicts [-Wconflicts-rr]
+ptx.y: warning: 1 nonterminal useless in grammar [-Wother]
+ptx.y: warning: 2 rules useless in grammar [-Wother]
+ptx.y:573.1-7: warning: nonterminal useless in grammar: vp_spec [-Wother]
+ vp_spec: WMMA_DIRECTIVE LAYOUT CONFIGURATION{recognizer->add_space_spec(global_space,0);recognizer->add_ptr_spec(global_space);recognizer->add_wmma_option($1);recognizer->add_wmma_option($2);recognizer->add_wmma_option($3);}
+ ^^^^^^^
+ptx.y:573.10-224: warning: rule useless in grammar [-Wother]
+ vp_spec: WMMA_DIRECTIVE LAYOUT CONFIGURATION{recognizer->add_space_spec(global_space,0);recognizer->add_ptr_spec(global_space);recognizer->add_wmma_option($1);recognizer->add_wmma_option($2);recognizer->add_wmma_option($3);}
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ptx.y:574.11-182: warning: rule useless in grammar [-Wother]
+ 	| WMMA_DIRECTIVE LAYOUT LAYOUT CONFIGURATION{recognizer->add_wmma_option($1);recognizer->add_wmma_option($2);recognizer->add_wmma_option($3);recognizer->add_wmma_option($4);}
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ptx.y: warning: 57 reduce/reduce conflicts [-Wconflicts-rr]
+ptx.y:277.11-112: warning: rule useless in parser due to conflicts [-Wother]
+ 	| WEAK_DIRECTIVE FUNC_DIRECTIVE { $$ = 0; recognizer->g_func_decl=1; recognizer->func_header(".func"); }
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+make[1]: *** [/scratch/gpfs/ishitac/gpgpusim-codes/ISCA_GPGPUSIM/gpgpu-sim_distribution/build/gcc-/cuda-/release/cuda-sim/lex.ptx_.c] Bus error
+make[1]: *** Waiting for unfinished jobs....
+make[1]: *** [/scratch/gpfs/ishitac/gpgpusim-codes/ISCA_GPGPUSIM/gpgpu-sim_distribution/build/gcc-/cuda-/release/cuda-sim/lex.ptxinfo_.c] Bus error
+make[2]: *** [/scratch/gpfs/ishitac/gpgpusim-codes/ISCA_GPGPUSIM/gpgpu-sim_distribution/build/gcc-/cuda-/release/accelwattch/bank.o] Bus error
+make[2]: *** Waiting for unfinished jobs....
+make[2]: *** [/scratch/gpfs/ishitac/gpgpusim-codes/ISCA_GPGPUSIM/gpgpu-sim_distribution/build/gcc-/cuda-/release/accelwattch/cacti_interface.o] Bus error
+make[2]: *** [/scratch/gpfs/ishitac/gpgpusim-codes/ISCA_GPGPUSIM/gpgpu-sim_distribution/build/gcc-/cuda-/release/accelwattch/router.o] Bus error
+make[2]: *** [/scratch/gpfs/ishitac/gpgpusim-codes/ISCA_GPGPUSIM/gpgpu-sim_distribution/build/gcc-/cuda-/release/accelwattch/memoryctrl.o] Bus error
+make[2]: *** [/scratch/gpfs/ishitac/gpgpusim-codes/ISCA_GPGPUSIM/gpgpu-sim_distribution/build/gcc-/cuda-/release/accelwattch/arbiter.o] Bus error
+make[2]: *** [/scratch/gpfs/ishitac/gpgpusim-codes/ISCA_GPGPUSIM/gpgpu-sim_distribution/build/gcc-/cuda-/release/accelwattch/XML_Parse.o] Bus error
+make[2]: *** [/scratch/gpfs/ishitac/gpgpusim-codes/ISCA_GPGPUSIM/gpgpu-sim_distribution/build/gcc-/cuda-/release/accelwattch/array.o] Bus error
+make[2]: *** [/scratch/gpfs/ishitac/gpgpusim-codes/ISCA_GPGPUSIM/gpgpu-sim_distribution/build/gcc-/cuda-/release/accelwattch/basic_circuit.o] Bus error
+make[2]: *** [/scratch/gpfs/ishitac/gpgpusim-codes/ISCA_GPGPUSIM/gpgpu-sim_distribution/build/gcc-/cuda-/release/accelwattch/component.o] Bus error
+make[2]: *** [/scratch/gpfs/ishitac/gpgpusim-codes/ISCA_GPGPUSIM/gpgpu-sim_distribution/build/gcc-/cuda-/release/accelwattch/basic_components.o] Bus error
+make[2]: *** [/scratch/gpfs/ishitac/gpgpusim-codes/ISCA_GPGPUSIM/gpgpu-sim_distribution/build/gcc-/cuda-/release/accelwattch/decoder.o] Bus error
+make[2]: *** [/scratch/gpfs/ishitac/gpgpusim-codes/ISCA_GPGPUSIM/gpgpu-sim_distribution/build/gcc-/cuda-/release/accelwattch/interconnect.o] Bus error
+make[2]: *** [/scratch/gpfs/ishitac/gpgpusim-codes/ISCA_GPGPUSIM/gpgpu-sim_distribution/build/gcc-/cuda-/release/accelwattch/io.o] Bus error
+make[2]: *** [/scratch/gpfs/ishitac/gpgpusim-codes/ISCA_GPGPUSIM/gpgpu-sim_distribution/build/gcc-/cuda-/release/accelwattch/crossbar.o] Bus error
+make[2]: *** [/scratch/gpfs/ishitac/gpgpusim-codes/ISCA_GPGPUSIM/gpgpu-sim_distribution/build/gcc-/cuda-/release/accelwattch/logic.o] Bus error
+make[2]: *** [/scratch/gpfs/ishitac/gpgpusim-codes/ISCA_GPGPUSIM/gpgpu-sim_distribution/build/gcc-/cuda-/release/accelwattch/htree2.o] Bus error
+make[2]: *** [/scratch/gpfs/ishitac/gpgpusim-codes/ISCA_GPGPUSIM/gpgpu-sim_distribution/build/gcc-/cuda-/release/accelwattch/iocontrollers.o] Bus error
+make[2]: *** [/scratch/gpfs/ishitac/gpgpusim-codes/ISCA_GPGPUSIM/gpgpu-sim_distribution/build/gcc-/cuda-/release/accelwattch/noc.o] Bus error
+make[2]: *** [/scratch/gpfs/ishitac/gpgpusim-codes/ISCA_GPGPUSIM/gpgpu-sim_distribution/build/gcc-/cuda-/release/accelwattch/nuca.o] Bus error
+make[2]: *** [/scratch/gpfs/ishitac/gpgpusim-codes/ISCA_GPGPUSIM/gpgpu-sim_distribution/build/gcc-/cuda-/release/accelwattch/main.o] Bus error
+make[2]: *** [/scratch/gpfs/ishitac/gpgpusim-codes/ISCA_GPGPUSIM/gpgpu-sim_distribution/build/gcc-/cuda-/release/accelwattch/processor.o] Bus error
+make[2]: *** [/scratch/gpfs/ishitac/gpgpusim-codes/ISCA_GPGPUSIM/gpgpu-sim_distribution/build/gcc-/cuda-/release/accelwattch/sharedcache.o] Bus error
+make[2]: *** [/scratch/gpfs/ishitac/gpgpusim-codes/ISCA_GPGPUSIM/gpgpu-sim_distribution/build/gcc-/cuda-/release/accelwattch/technology.o] Bus error
+make[2]: *** [/scratch/gpfs/ishitac/gpgpusim-codes/ISCA_GPGPUSIM/gpgpu-sim_distribution/build/gcc-/cuda-/release/accelwattch/parameter.o] Bus error
+make[2]: *** [/scratch/gpfs/ishitac/gpgpusim-codes/ISCA_GPGPUSIM/gpgpu-sim_distribution/build/gcc-/cuda-/release/accelwattch/wire.o] Bus error
+make[2]: *** [/scratch/gpfs/ishitac/gpgpusim-codes/ISCA_GPGPUSIM/gpgpu-sim_distribution/build/gcc-/cuda-/release/accelwattch/gpgpu_sim_wrapper.o] Bus error
+make[2]: *** [/scratch/gpfs/ishitac/gpgpusim-codes/ISCA_GPGPUSIM/gpgpu-sim_distribution/build/gcc-/cuda-/release/accelwattch/subarray.o] Bus error
+make[2]: *** [/scratch/gpfs/ishitac/gpgpusim-codes/ISCA_GPGPUSIM/gpgpu-sim_distribution/build/gcc-/cuda-/release/accelwattch/xmlParser.o] Bus error
+make[1]: *** [/scratch/gpfs/ishitac/gpgpusim-codes/ISCA_GPGPUSIM/gpgpu-sim_distribution/build/gcc-/cuda-/release/cuda-sim/memory.o] Bus error
+make[1]: *** [/scratch/gpfs/ishitac/gpgpusim-codes/ISCA_GPGPUSIM/gpgpu-sim_distribution/build/gcc-/cuda-/release/cuda-sim/decuda_pred_table/decuda_pred_table.o] Bus error
+make: *** [cuda-sim] Error 2
+make: *** Waiting for unfinished jobs....
+make[2]: *** [/scratch/gpfs/ishitac/gpgpusim-codes/ISCA_GPGPUSIM/gpgpu-sim_distribution/build/gcc-/cuda-/release/accelwattch/Ucache.o] Bus error
+make[2]: *** [/scratch/gpfs/ishitac/gpgpusim-codes/ISCA_GPGPUSIM/gpgpu-sim_distribution/build/gcc-/cuda-/release/accelwattch/area.o] Bus error
+make[2]: *** [/scratch/gpfs/ishitac/gpgpusim-codes/ISCA_GPGPUSIM/gpgpu-sim_distribution/build/gcc-/cuda-/release/accelwattch/core.o] Bus error
+make[2]: *** [/scratch/gpfs/ishitac/gpgpusim-codes/ISCA_GPGPUSIM/gpgpu-sim_distribution/build/gcc-/cuda-/release/accelwattch/mat.o] Bus error
+make[2]: *** [/scratch/gpfs/ishitac/gpgpusim-codes/ISCA_GPGPUSIM/gpgpu-sim_distribution/build/gcc-/cuda-/release/accelwattch/uca.o] Bus error
+make[1]: *** [opt] Error 2
+make: *** [mcpat] Error 2
