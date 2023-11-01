@@ -208,9 +208,20 @@ bool trace_warp_inst_t::parse_from_trace_struct(
   std::string opcode = trace.opcode;
 
   std::string bra_check("BRA");
-  branching_inst = !(bra_check.compare(opcode1)) && active_mask!= 0;
+  std::string bssy_check("BSSY");
+  std::string bsync_check("BSYNC");
+  std::string predicate_set("SETP");
 
-  //std::cout <<"GETTING_OPCODE "<<m_opcode<<" "<<opcode1<<" "<<opcode<<" op "<<op<<" "<<pc<<"\n";
+  branching_inst = (!(bra_check.compare(opcode1))) && active_mask!= 0;
+
+  predicate_inst = (opcode1.find(predicate_set) != std::string::npos);
+
+  no_stall_control_inst = (opcode1.find(bssy_check) != std::string::npos) || (opcode1.find(bsync_check) != std::string::npos);
+
+  //branching_inst = (!(bra_check.compare(opcode1)) || !(bssy_check.compare(opcode1))) && active_mask!= 0;
+
+  // if(no_stall_control_inst)
+  //   std::cout <<"GETTING_OPCODE "<<m_opcode<<" "<<opcode1<<" "<<opcode<<" op "<<op<<" "<<pc<<" "<<no_stall_control_inst<<"\n";
   if(opcode1 == "MUFU"){ // Differentiate between different MUFU operations for power model
     if ((opcode == "MUFU.SIN") || (opcode == "MUFU.COS"))
       sp_op = FP_SIN_OP;
@@ -809,7 +820,8 @@ bool trace_shader_core_ctx::isSyncInstCoreNonMemory(const warp_inst_t *inst, int
   //return ((inst->op == BRANCH_OP || inst->op == BARRIER_OP || inst->op == RET_OPS || inst->op == EXIT_OPS|| inst->isatomic()|| inst->op == SPECIALIZED_UNIT_1_OP  ) && inst->get_active_mask()!= 0);
 
   // stops OoO at branch entrirely
-  return ((inst->op == BRANCH_OP || inst->op == BARRIER_OP || inst->op == RET_OPS || inst->op == EXIT_OPS|| inst->isatomic()|| (inst->op == SPECIALIZED_UNIT_1_OP && !inst->branching_inst)) && inst->get_active_mask()!= 0);
+
+  return ((inst->op == BRANCH_OP || inst->op == BARRIER_OP || inst->op == RET_OPS || inst->op == EXIT_OPS|| inst->isatomic()|| (inst->op == SPECIALIZED_UNIT_1_OP)) && !inst->branching_inst && inst->get_active_mask()!= 0 && !inst->no_stall_control_inst);
 
   //return ((inst->op == BRANCH_OP ||  inst->op == BARRIER_OP || (inst->op == EXIT_OPS) || inst->op == SPECIALIZED_UNIT_1_OP ) && inst->get_active_mask()!= 0);
 

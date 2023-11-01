@@ -153,6 +153,7 @@ class shd_warp_t {
     ibuffer_store_inst = 0;	
     ibuffer_memory_inst = 0;	
     ibuffer_control_inst = 0;	
+    predicate_inst = 0;
     stalls_for_inst = 0;
     ibuffer_inst_number = 0;	
     stall_points = 0;	
@@ -213,6 +214,7 @@ class shd_warp_t {
     stall_points = 0;	
     stall_point_PC = -1;	
     ibuffer_control_inst = 0;	
+    predicate_inst = 0;
     stalls_for_inst = 0;
     ibuffer_inst_number = 0;	
     stalls_between_issues = 0;	
@@ -430,7 +432,7 @@ class shd_warp_t {
     stop_fetching_when_inst_0 = 0;
   }
 
-  void ibuffer_fill_OOO(unsigned slot, const warp_inst_t *pI, int PC,int tail,int tail_full_OOO, int num_stores,int warp, int mem_count, int m_control_count, int cycle) {	
+  void ibuffer_fill_OOO(unsigned slot, const warp_inst_t *pI, int PC,int tail,int tail_full_OOO, int num_stores,int warp, int mem_count, int m_control_count, int cycle, int predicate_inst) {	
 
     //assert(slot < IBUFFER_SIZE_IN_ORDER);	
     ibuffer_OOO[slot].m_inst = pI;	
@@ -444,7 +446,7 @@ class shd_warp_t {
     ibuffer_OOO[slot].control_check_in_order = m_control_count;
     ibuffer_OOO[slot].m_control_inst_OOO = 0;
     ibuffer_OOO[slot].m_pushed_in_OOO = cycle;
-    ibuffer_OOO[slot].m_DEB_bit = 0;
+    ibuffer_OOO[slot].m_DEB_bit = predicate_inst;
     ibuffer_OOO[slot].m_inst_number = -1;
     ibuffer_OOO[slot].m_stall_cycles = -1;
     ibuffer_OOO[slot].mem_dep = -1;
@@ -567,11 +569,6 @@ class shd_warp_t {
     }
   }
   
-
-  void set_ibuffer_DEB_bit(int loc)
-  {
-    ibuffer_OOO[loc].m_DEB_bit = 1;
-  }
 
   int get_ibuffer_pushed_OOO_all(unsigned slot)
   {
@@ -794,6 +791,7 @@ class shd_warp_t {
     ibuffer_tail = 0;
     ibuffer_tail_full_OOO = 0;
     ibuffer_control_inst = 0;
+    predicate_inst = 0;
     stalls_for_inst = 0;
   }	
 
@@ -826,6 +824,7 @@ class shd_warp_t {
     ibuffer_tail = 0;
     ibuffer_tail_full_OOO = 0;
     ibuffer_control_inst = 0;
+    predicate_inst = 0;
     stalls_for_inst = 0;
   }	
 
@@ -941,6 +940,10 @@ class shd_warp_t {
     return ibuffer_OOO[index].control_check_in_order;
   }
 
+  bool get_predicate(int index) {
+    return ibuffer_OOO[index].m_DEB_bit;
+  }
+
   void set_control_bit(int index)
   {
     ibuffer_OOO[index].control_check = 1;
@@ -953,6 +956,16 @@ class shd_warp_t {
       if (ibuffer_OOO[i].m_valid && ibuffer_OOO[i].m_index > index)	
       {	
         ibuffer_OOO[i].control_check_in_order--;
+      }	
+    }	
+  }
+
+  void reduce_predicate_val(int index)
+  {
+    for (unsigned i = 0; i < IBUFFER_SIZE; i++) {	
+      if (ibuffer_OOO[i].m_valid && ibuffer_OOO[i].m_index > index)	
+      {	
+        ibuffer_OOO[i].m_DEB_bit--;
       }	
     }	
   }
@@ -1239,6 +1252,11 @@ class shd_warp_t {
     ibuffer_control_inst++;
   }
 
+  void ibuffer_increment_predicate_inst()
+  {
+    predicate_inst++;
+  }
+
   int get_stalls_for_inst()
   {
     return stalls_for_inst;
@@ -1259,9 +1277,19 @@ class shd_warp_t {
     ibuffer_control_inst--;
   }
 
+  void ibuffer_decrement_predicate_inst_OOO()
+  {
+    predicate_inst--;
+  }
+
   int ibuffer_get_control_inst_OOO()
   {
     return ibuffer_control_inst;
+  }
+
+  int ibuffer_get_predicate_inst_OOO()
+  {
+    return predicate_inst;
   }
 
 
@@ -1711,6 +1739,7 @@ class shd_warp_t {
   unsigned ibuffer_store_inst;
   unsigned ibuffer_memory_inst;
   unsigned ibuffer_control_inst;
+  unsigned predicate_inst;
   unsigned ibuffer_inst_number;
 
   int stalls_for_inst;

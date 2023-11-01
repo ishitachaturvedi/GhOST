@@ -26,7 +26,7 @@
 
 
 #BIN_DIR=./bin/SIB4/release/$(ACCELSIM_CONFIG)
-BIN_DIR=./bin/$(ACCELSIM_CONFIG)
+BIN_DIR=./bin/release/$(ACCELSIM_CONFIG)
 BUILD_DIR=./build/$(ACCELSIM_CONFIG)
 
 include version_detection.mk

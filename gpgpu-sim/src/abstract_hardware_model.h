@@ -949,6 +949,8 @@ class inst_t {
     num_operands = 0;
     num_regs = 0;
     branching_inst = 0;
+    predicate_inst = 0;
+    no_stall_control_inst = 0;
     memset(out, 0, sizeof(unsigned));
     memset(in, 0, sizeof(unsigned));
     memset(addr_keeper, 0, sizeof(unsigned));
@@ -1013,6 +1015,8 @@ class inst_t {
   unsigned bar_id;
   unsigned bar_count;
   int branching_inst;
+  int predicate_inst;
+  int no_stall_control_inst;
 
   types_of_operands oprnd_type;  // code (uarch visible) identify if the
                                  // operation is an interger or a floating point
