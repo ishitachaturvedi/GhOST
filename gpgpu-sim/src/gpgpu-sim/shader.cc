@@ -67,6 +67,8 @@ using namespace std;
 #define IB_OOO_FULL	
 #define TWO_STAGE_IB
 
+//#define TLB_on
+
 //#endif	
 //#define HAWS_ON	
 
@@ -1044,8 +1046,12 @@ void shader_core_ctx::PutInstInIB2(int warp_id)
         m_warp[warp_id]->ibuffer_increase_store();
 
       // increase num memory instructions
+      // TLB_check
+#ifdef TLB_on
       if(pI->op==LOAD_OP || pI->op==STORE_OP)
-      //if(pI->op==TENSOR_CORE_STORE_OP || pI->op==STORE_OP)
+#else
+      if(pI->op==STORE_OP)
+#endif
         m_warp[warp_id]->ibuffer_increase_memory_count();
 
       if(pI->op==BRANCH_OP || pI->branching_inst == 1)
@@ -1811,12 +1817,14 @@ void shader_core_ctx::issue_warp_ibuffer_OOO_in_order(register_set &pipe_reg_set
 
   assert(pipe_reg);
 
-  // if(next_inst->is_load() && ((next_inst->space.get_type() == global_space) ||
-  //                      (next_inst->space.get_type() == local_space) ||
-  //                      (next_inst->space.get_type() == param_space_local)) && !(next_inst->active_count() == 0))
-  // {
-  //   m_warp[warp_id]->warp_stuck_replay = 1; // for TLB modeling
-  // }
+#ifdef TLB_on
+  if(next_inst->is_load() && ((next_inst->space.get_type() == global_space) ||
+                       (next_inst->space.get_type() == local_space) ||
+                       (next_inst->space.get_type() == param_space_local)) && !(next_inst->active_count() == 0))
+  {
+    m_warp[warp_id]->last_pc_decoded_streaming_test = 1; // for TLB modeling
+  }
+#endif
 
   m_warp[warp_id]->set_stalls_for_inst_zero();
  
@@ -1908,7 +1916,11 @@ void shader_core_ctx::issue_warp_ibuffer_OOO_in_order(register_set &pipe_reg_set
   }
 
   //decrease memory instructions in DEB
+#ifdef TLB_on
   if(next_inst->op==LOAD_OP || next_inst->op==TENSOR_CORE_LOAD_OP || next_inst->op==TENSOR_CORE_STORE_OP || next_inst->op==STORE_OP)
+#else
+  if(next_inst->op==TENSOR_CORE_STORE_OP || next_inst->op==STORE_OP)
+#endif
   {
     m_warp[warp_id]->ibuffer_decrease_memory_count();
     m_warp[warp_id]->ibuffer_decrease_meminst(index_num,warp_id);
@@ -2038,7 +2050,11 @@ void shader_core_ctx::issue_warp_push_from_replay_DEB_IB_OOO(register_set &pipe_
   }
 
   //decrease memory instructions in DEB
+#ifdef TLB_on
   if(next_inst->op==LOAD_OP || next_inst->op==TENSOR_CORE_LOAD_OP || next_inst->op==TENSOR_CORE_STORE_OP || next_inst->op==STORE_OP)
+#else
+  if(next_inst->op==TENSOR_CORE_STORE_OP || next_inst->op==STORE_OP)
+#endif
   {
     m_warp[warp_id]->ibuffer_decrease_memory_count();
     m_warp[warp_id]->ibuffer_decrease_meminst_IB_IN_FROM_OOO(index_num,warp_id);
@@ -2054,7 +2070,11 @@ void shader_core_ctx::issue_warp_push_from_replay_DEB_IB_OOO(register_set &pipe_
   }
 
   //decrease memory instructions in DEB
+#ifdef TLB_on
   if(next_inst->op==LOAD_OP || next_inst->op==TENSOR_CORE_LOAD_OP || next_inst->op==TENSOR_CORE_STORE_OP || next_inst->op==STORE_OP)
+#else
+  if(next_inst->op==TENSOR_CORE_STORE_OP || next_inst->op==STORE_OP)
+#endif
   {
     m_warp[warp_id]->ibuffer_decrease_memory_count();
     m_warp[warp_id]->ibuffer_decrease_meminst(index_num,warp_id);
@@ -3097,10 +3117,11 @@ void scheduler_unit::cycle_ibuffer_OOO(int m_cluster_id, int sched_num) {
           }
         #endif
 
-          // TLB check added m_warp[warp_id]->warp_stuck_replay == 0
           //if ((!m_scoreboard->checkCollision(warp_id, pI,0,0) && !replay_collision) && (!IB_is_full_OOO || can_push_inst_OOO)
           if ((!m_scoreboard->checkCollision(warp_id, pI,0,0) && (inst_index == 0) && (issued < max_issue)) && (!IB_is_full_OOO || can_push_inst_OOO)
-          //&& (warp(warp_id).warp_stuck_replay == 0)
+#ifdef TLB_on
+          && (warp(warp_id).last_pc_decoded_streaming_test == 0) // TLB check added
+#endif
           #ifdef IB_OOO_FULL
             && (warp(warp_id).get_control_bit_in_order(inst_loc) == 0) // control_inst_Ishita
             && !(pI->branching_inst && warp(warp_id).get_predicate(inst_loc) > 0) // predicate_check_Ishita
@@ -3838,7 +3859,7 @@ int scheduler_unit::replay_ib_inst(int m_cluster_id, int sched_num, int &warp_id
         if ((*iter) != NULL && !(*iter)->done_exit())
         {
           int warp_id = (*iter)->get_warp_id();
-          // if (warp(warp_id).warp_stuck_replay)
+          // if (warp(warp_id).last_pc_decoded_streaming_test)
           // {
           //   warp_list_replay_hold.push_back(*iter);
           // }
@@ -4142,7 +4163,8 @@ while (g
         bool checkAddrAndDecide = m_shader->m_config->perfect_memory_aliasing;
         depExists = true;
         bool checkedInside = false;
-        if(checkAddrAndDecide && (warp(warp_id).get_mem_dep(inst_loc) == -1))
+        //if(checkAddrAndDecide && (warp(warp_id).get_mem_dep(inst_loc) == -1))
+        if(checkAddrAndDecide)
         {
           depExists = false;
 
@@ -4168,7 +4190,6 @@ while (g
 
           // for stores check deps on any load/store
           //if(m_shader->m_config->gpgpu_reply_buffer && (pI->op == STORE_OP ||  pI->op == TENSOR_CORE_STORE_OP ) && (warp(warp_id).get_mem_inst_OOO(inst_loc) > 0))
-
           if(m_shader->m_config->gpgpu_reply_buffer && (pI->is_load() || pI->is_store()) && (warp(warp_id).get_mem_inst_OOO(inst_loc) > 0))
           {
             #ifndef IB_OOO_FULL
@@ -4242,14 +4263,15 @@ while (g
             // stop all mem
             && !(((pI->op == LOAD_OP) || (pI->op == STORE_OP)) && (warp(warp_id).get_mem_inst_OOO(inst_loc) > 0 && depExists))
             // TLB check 
-            //&& (warp(warp_id).warp_stuck_replay == 0)
+#ifdef TLB_on
+            && (warp(warp_id).last_pc_decoded_streaming_test == 0)
+#endif
             #ifdef IB_OOO_FULL
               && (warp(warp_id).get_control_bit_in_order(inst_loc) == 0) // control_inst_Ishita
               && !(pI->branching_inst && warp(warp_id).get_predicate(inst_loc) > 0) // predicate_check_Ishita
             #endif
             )
           {
-
             SCHED_DPRINTF(
                 "Warp (warp_id %u, dynamic_warp_id %u) passes scoreboard\n",
                 (*iter)->get_warp_id(), (*iter)->get_dynamic_warp_id());
@@ -5142,13 +5164,15 @@ mem_stage_stall_type ldst_unit::process_memory_access_queue_l1cache(
 
         inst.accessq_pop_back();
         //if(inst.is_load() && inst.accessq_empty())
-        // if(inst.is_load())
-        // {
-        //   //std::cout<<"INTO_l1 "<<inst.get_wid()<<" "<<m_core->get_stalled_on_TLB(inst.get_wid())<<" ";
-        //   m_core->set_stalled_on_TLB(inst.get_wid(),0);
-        //   //std::cout<<m_core->get_stalled_on_TLB(inst.get_wid())<<"\n";
-        //   //m_core->m_warp[inst.get_wid()]->set_last_fetch(m_core->get_gpu()->gpu_sim_cycle)
-        // }
+#ifdef TLB_on
+        if(inst.is_load())
+        {
+          //std::cout<<"INTO_l1 "<<inst.get_wid()<<" "<<m_core->get_stalled_on_TLB(inst.get_wid())<<" ";
+          m_core->set_stalled_on_TLB(inst.get_wid(),0);
+          //std::cout<<m_core->get_stalled_on_TLB(inst.get_wid())<<"\n";
+          //m_core->m_warp[inst.get_wid()]->set_last_fetch(m_core->get_gpu()->gpu_sim_cycle)
+        }
+#endif
       } else {
         result = BK_CONF;
         delete mf;

@@ -166,7 +166,7 @@ class shd_warp_t {
     warp_inst_retired = 0;	
     stalls_between_issues = 0;	
     stalled_on_replay = -1;	
-    //warp_stuck_replay = 0;	
+    last_pc_decoded_streaming_test = 0;	
     num_inst_OOO = 0;
     stop_fetching_when_inst_0 = 0;
     //SCHED_IBUFFER_SIZE = 64;
@@ -200,7 +200,7 @@ class shd_warp_t {
     ibuffer_m_next_streaming = 0;	
     replay_m_fill_next_mem = 0;	
     last_pc_decoded_streaming = start_pc;	
-    last_pc_decoded_streaming_test = start_pc;	
+    last_pc_decoded_streaming_test = 0;	
     warp_inst_retired = 0;	
     replay_buffer_head = 0;	
     replay_buffer_tail = 0;	
@@ -268,7 +268,6 @@ class shd_warp_t {
   void set_streaming_pc_hazard(address_type pc, int warp_id, const int &fetch_warp, const bool &valid)	
   {	
     last_pc_decoded_streaming = pc;	
-    last_pc_decoded_streaming_test = pc;	
   }	
   void get_last_pc_decoded_streaming()	
   {	
@@ -1684,6 +1683,7 @@ class shd_warp_t {
   unsigned stalls_between_issues;
   unsigned num_inst_OOO;
   int stalled_on_replay;
+  //int warp_stuck_replay;
 
   unsigned IBUFFER_SIZE;
   unsigned SCHED_IBUFFER_SIZE;
@@ -3578,9 +3578,9 @@ class shader_core_ctx : public core_t {
   kernel_info_t *get_kernel() { return m_kernel; }
   unsigned get_sid() const { return m_sid; }
 
-  // int get_stalled_on_TLB(int wid) {return m_warp[wid]->warp_stuck_replay; }
+  int get_stalled_on_TLB(int wid) {return m_warp[wid]->last_pc_decoded_streaming_test; }
 
-  // void set_stalled_on_TLB(int wid, int val) { m_warp[wid]->warp_stuck_replay = val; }
+  void set_stalled_on_TLB(int wid, int val) { m_warp[wid]->last_pc_decoded_streaming_test = val; }
 
   // used by functional simulation:
   // modifiers
