@@ -211,12 +211,24 @@ bool trace_warp_inst_t::parse_from_trace_struct(
   std::string bssy_check("BSSY");
   std::string bsync_check("BSYNC");
   std::string predicate_set("SETP");
+  std::string BMOV_set("BMOV");
+  std::string BREAK_set("BREAK");
+  std::string BRX_set("BRX");
+  std::string BRXU_set("BRXU");
+  std::string JMP_set("JMP");
+  std::string JMX_set("JMX");
+  std::string JMXU_set("JMXU");
+  std::string RPCMOV_set("RPCMOV");
 
   branching_inst = (!(bra_check.compare(opcode1))) && active_mask!= 0;
 
   predicate_inst = (opcode1.find(predicate_set) != std::string::npos);
 
   no_stall_control_inst = (opcode1.find(bssy_check) != std::string::npos) || (opcode1.find(bsync_check) != std::string::npos);
+                      // || (opcode1.find(BMOV_set) != std::string::npos) || (opcode1.find(BREAK_set) != std::string::npos) 
+                      // || (opcode1.find(BRX_set) != std::string::npos) || (opcode1.find(BRXU_set) != std::string::npos) 
+                      // || (opcode1.find(JMP_set) != std::string::npos) || (opcode1.find(JMX_set) != std::string::npos) 
+                      // || (opcode1.find(JMXU_set) != std::string::npos) || (opcode1.find(RPCMOV_set) != std::string::npos);
 
   //branching_inst = (!(bra_check.compare(opcode1)) || !(bssy_check.compare(opcode1))) && active_mask!= 0;
 
