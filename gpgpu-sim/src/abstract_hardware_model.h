@@ -1267,10 +1267,13 @@ class warp_inst_t : public inst_t {
   int get_cycle_issued() const { return cycle_issued; }		
   void set_cycle_issued_warp(int cycle) { warp_issued_cycle = cycle; }		
   int get_cycle_issued_warp() const { return warp_issued_cycle; }	
+  void set_issued_loc(int idx) { m_inst_number = idx; }
+  int get_issued_loc() const { return m_inst_number; }
   unsigned m_checked_for_dep;	
   unsigned m_stalled_cycles;	
   unsigned m_inst_number;	
   bool m_empty;
+  //int m_issue_index;
 
  protected:
   unsigned m_uid;

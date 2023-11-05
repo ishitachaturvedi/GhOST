@@ -67,6 +67,9 @@ using namespace std;
 #define IB_OOO_FULL	
 #define TWO_STAGE_IB
 
+// free the instruction buffer entry only if it is the oldest instruction in the issue buffer and has written back
+//#define free_on_oldest
+
 //#define TLB_on
 
 //#endif	
@@ -1009,17 +1012,22 @@ void shader_core_ctx::PutInstInIB2(int warp_id)
   }
   IB1_index = 0;
 
-  //while(m_warp[warp_id]->ibuffer_has_space_streaming_full_OOO() && IB1_index < m_warp[warp_id]->get_ibuffer_size())
-  // if(warp_id == 0)
-  //   std::cout<<"CHECKING_COND "<<m_warp[warp_id]->ibuffer_has_space_streaming_full_OOO()<<" "<<IB1_index<<" "<<m_warp[warp_id]->get_Sched_ibuffer_size()<<" "<<m_warp[warp_id]->ibuffer_1_empty_streaming_full_OOO()<<"\n";
+#ifndef free_on_oldest
   while(m_warp[warp_id]->ibuffer_has_space_streaming_full_OOO() && IB1_index < m_warp[warp_id]->get_Sched_ibuffer_size())
+#else
+  while(m_warp[warp_id]->ibuffer_has_space_streaming_empty_on_WB() && IB1_index < m_warp[warp_id]->get_Sched_ibuffer_size())
+#endif
   {
     // place instructions inside IB2 from IB1
+#ifndef free_on_oldest
     int pos = m_warp[warp_id]->ibuffer_empty_idx_FULL_OOO();
+#else
+    int pos = m_warp[warp_id]->ibuffer_empty_idx_keep_in_IB();
+#endif
+
     assert(pos!=-1);
     const warp_inst_t *pI = m_warp[warp_id]->ibuffer_1_next_inst_OOO(IB1_index);
     if(m_warp[warp_id]->ibuffer_1_next_valid_OOO(IB1_index) && pI && (m_warp[warp_id]->get_SIB_time(IB1_index)<=0))
-    //if(m_warp[warp_id]->ibuffer_1_next_valid_OOO(IB1_index) && pI)
     {
     #ifndef trace_driven
       int pc = m_warp[warp_id]->get_ibuffer_1_pc(IB1_index);
@@ -1034,12 +1042,18 @@ void shader_core_ctx::PutInstInIB2(int warp_id)
       mem_count = m_warp[warp_id]->ibuffer_get_memory_count();
       nonMemSync = m_warp[warp_id]->ibuffer_get_control_inst_OOO();
       predicate_inst = m_warp[warp_id]->ibuffer_get_predicate_inst_OOO();
+    // if(warp_id == 3)
+    //   std::cout<<"IN_HERE1 "<<warp_id<<" "<<pI<<" pos "<<pos<<" pc "<<pc<<" tail "<<tail<<" "<<tail_full_OOO<<" "<<m_warp[warp_id]->val_ibuffer_has_space_streaming_empty_on_WB()<<" "<<m_warp[warp_id]->ibuffer_has_space_streaming_empty_on_WB()<<"\n";
       m_warp[warp_id]->ibuffer_fill_OOO(pos,pI,pc,tail,tail_full_OOO,num_stores,warp_id,mem_count,nonMemSync,cycles_passed,predicate_inst);
       m_warp[warp_id]->inc_inst_in_pipeline();
-
       // increase tail
       m_warp[warp_id]->ibuffer_increment_tail_OOO();
       m_warp[warp_id]->ibuffer_increment_tail_full_OOO();
+
+    // if(warp_id == 3)
+    // {
+    //   std::cout<<"IN_HERE2 warp "<<warp_id<<" valid "<<m_warp[warp_id]->ibuffer_next_valid_OOO(pos)<<" inst "<<pI<<" loc "<<pos<<" index "<<m_warp[warp_id]->get_index_of_loc(pos)<<" free "<<m_warp[warp_id]->get_inst_as_free(pos)<<" comp "<<m_warp[warp_id]->get_inst_complete(pos)<<"\n"<<std::flush;
+    // }
 
       // increase num_stores
       if(pI->op==STORE_OP || pI->op==TENSOR_CORE_STORE_OP)
@@ -1827,8 +1841,14 @@ void shader_core_ctx::issue_warp_ibuffer_OOO_in_order(register_set &pipe_reg_set
 #endif
 
   m_warp[warp_id]->set_stalls_for_inst_zero();
+
+#ifdef free_on_oldest
+  m_warp[warp_id]->set_inst_in_or_OOO(index_loc,2);
+#endif
  
   //std::cout <<"INST_ISSUE_CYCLE_IN_ORDER "<<next_inst->pc<<" "<<next_inst->op<<" "<<(cycles_passed-m_warp[warp_id]->get_stall_cycle(index_loc))<<"\n";
+  // if(warp_id == 3)
+  //   std::cout<<"IN_ORDER_ISSUE "<<warp_id<<" "<<next_inst<<" "<<index_loc<<" "<<index_num<<"\n";
 #ifdef IB_OOO_FULL
   // check if instruction is a branch inst, if yes, reduce the branch inst counter
   if(next_inst->op == BRANCH_OP || next_inst->branching_inst == 1)
@@ -1851,13 +1871,19 @@ void shader_core_ctx::issue_warp_ibuffer_OOO_in_order(register_set &pipe_reg_set
   independent_instruction_count += replay_collision;
 
   //m_warp[warp_id]->ibuffer_free();
+#ifndef free_on_oldest
   m_warp[warp_id]->ibuffer_free_OOO(index_loc);
+#else
+  m_warp[warp_id]->ibuffer_free_OOO_free_on_oldest(index_loc);
+#endif
+
   assert(next_inst->valid());
   **pipe_reg = *next_inst;  // static instruction information
   (*pipe_reg)->set_sid(sid);
   (*pipe_reg)->set_wid(warp_id);
   (*pipe_reg)->set_cluster_id(m_cluster_id);
   (*pipe_reg)->set_cycle_issued(cycles_passed);
+  (*pipe_reg)->set_issued_loc(index_loc);
   (*pipe_reg)->set_cycle_issued_warp(cycles_passed);
   const_cast<warp_inst_t *>(next_inst)->set_sid(sid);
   const_cast<warp_inst_t *>(next_inst)->set_cluster_id(sid);
@@ -1919,7 +1945,7 @@ void shader_core_ctx::issue_warp_ibuffer_OOO_in_order(register_set &pipe_reg_set
 #ifdef TLB_on
   if(next_inst->op==LOAD_OP || next_inst->op==TENSOR_CORE_LOAD_OP || next_inst->op==TENSOR_CORE_STORE_OP || next_inst->op==STORE_OP)
 #else
-  if(next_inst->op==TENSOR_CORE_STORE_OP || next_inst->op==STORE_OP)
+  if(next_inst->op==STORE_OP)
 #endif
   {
     m_warp[warp_id]->ibuffer_decrease_memory_count();
@@ -1927,19 +1953,25 @@ void shader_core_ctx::issue_warp_ibuffer_OOO_in_order(register_set &pipe_reg_set
   }
 #endif
 
+#ifndef free_on_oldest
   m_warp[warp_id]->ibuffer_decrement_tail_OOO();
-
+#endif
 
 #ifdef IB_OOO_FULL
+#ifndef free_on_oldest
   m_warp[warp_id]->ibuffer_decrease_all_index_OOO(index_num, warp_id);
 #endif
 #ifndef IB_OOO_FULL
   m_warp[warp_id]->ibuffer_decrease_all_index_IB_IN_OOO(index_num, warp_id);
 #endif
+#endif
 
   m_warp[warp_id]->set_next_pc(next_inst->pc + next_inst->isize);
   // decrement the IB OOO tail as well
+
+#ifndef free_on_oldest
   m_warp[warp_id]->ibuffer_decrement_tail_full_OOO();
+#endif
 
   m_scoreboard->set_num_cycles_deocode_issue(cycles_spent_in_ib, *pipe_reg);
 
@@ -1958,12 +1990,17 @@ void shader_core_ctx::issue_warp_push_from_replay_DEB_IB_OOO(register_set &pipe_
   int found = 0;  
   m_warp[warp_id]->set_stalls_for_inst_zero();
 
+#ifdef free_on_oldest
+  m_warp[warp_id]->set_inst_in_or_OOO(index_loc,3);
+#endif
+
   // if(index_num == 0 && warp_id == 0 && m_cluster_id == 0 && m_sid == 0)
   //   std::cout<<"Issue_inorder "<< std::hex << next_inst->pc<<" "<<std::dec<<next_inst->op<<" "<<warp_id<<" "<<index_num<<"\n";
   // else if(warp_id == 0 && m_cluster_id == 0 && m_sid == 0)
   //   std::cout<<"Issue_OOO "<< std::hex <<next_inst->pc<<" "<<std::dec<<next_inst->op<<" "<<warp_id<<" "<<index_num<<"\n";
   //std::cout <<"INST_ISSUE_CYCLE_OOO "<<next_inst->pc<<" "<<next_inst->op<<" "<<(cycles_passed-m_warp[warp_id]->get_stall_cycle(index_loc))<<"\n";
-
+  // if(warp_id == 3)
+  //   std::cout<<"OO_ORDER_ISSUE warp "<<warp_id<<" inst "<<next_inst<<" loc "<<index_loc<<" idx "<<index_num<<"\n";
 #ifdef IB_OOO_FULL
   // check if instruction is a branch inst, if yes, reduce the branch inst counter
   if(next_inst->op == BRANCH_OP || next_inst->branching_inst == 1)
@@ -1980,15 +2017,13 @@ void shader_core_ctx::issue_warp_push_from_replay_DEB_IB_OOO(register_set &pipe_
 
 #endif
 
-    if(index_num != 0)
-    {
-      int inst_loc_test = m_warp[warp_id]->ibuffer_index_full_OOO((index_num-1),warp_id);
-      const warp_inst_t *pI_test = m_warp[warp_id]->ibuffer_next_inst_OOO(inst_loc_test);
-    }
-
-
   assert(pipe_reg);
+
+#ifndef free_on_oldest
   m_warp[warp_id]->ibuffer_free_OOO(index_loc);
+#else
+  m_warp[warp_id]->ibuffer_free_OOO_free_on_oldest(index_loc);
+#endif
 
   // increase the location of the head
 
@@ -1998,6 +2033,7 @@ void shader_core_ctx::issue_warp_push_from_replay_DEB_IB_OOO(register_set &pipe_
   (*pipe_reg)->set_wid(warp_id);
   (*pipe_reg)->set_cluster_id(m_cluster_id);
   (*pipe_reg)->set_cycle_issued(cycles_passed);
+  (*pipe_reg)->set_issued_loc(index_loc);
   (*pipe_reg)->set_active_mask(active_mask);
   (*pipe_reg)->issue_push_from_replay(active_mask, warp_id,
                      m_gpu->gpu_tot_sim_cycle + m_gpu->gpu_sim_cycle,
@@ -2073,7 +2109,7 @@ void shader_core_ctx::issue_warp_push_from_replay_DEB_IB_OOO(register_set &pipe_
 #ifdef TLB_on
   if(next_inst->op==LOAD_OP || next_inst->op==TENSOR_CORE_LOAD_OP || next_inst->op==TENSOR_CORE_STORE_OP || next_inst->op==STORE_OP)
 #else
-  if(next_inst->op==TENSOR_CORE_STORE_OP || next_inst->op==STORE_OP)
+  if(next_inst->op==STORE_OP)
 #endif
   {
     m_warp[warp_id]->ibuffer_decrease_memory_count();
@@ -2082,17 +2118,23 @@ void shader_core_ctx::issue_warp_push_from_replay_DEB_IB_OOO(register_set &pipe_
 #endif
 
   // decrease all instructions and the tail
+#ifndef free_on_oldest
   m_warp[warp_id]->replay_buffer_decrement_tail_IB_DEB_OOO();
+#endif
 
+#ifndef free_on_oldest
 #ifdef IB_OOO_FULL
   m_warp[warp_id]->ibuffer_decrease_all_index_OOO(index_num, warp_id);
 #endif
 #ifndef IB_OOO_FULL 
   m_warp[warp_id]->ibuffer_decrease_all_index_IB_DEB_OOO(index_num, warp_id);
 #endif
+#endif
 
   // decrease full OOO tail
+#ifndef free_on_oldest
   m_warp[warp_id]->ibuffer_decrement_tail_full_OOO();
+#endif
 
   m_scoreboard->set_num_cycles_deocode_issue(cycles_spent_in_ib, *pipe_reg);
 }
@@ -2159,7 +2201,11 @@ void shader_core_ctx::issue_warp_push_in_DEB_IB_OOO(const warp_inst_t *next_inst
 #ifndef IB_OOO_FULL
   m_warp[warp_id]->ibuffer_fill_OOO_replay(id,tail,inst_loc);
 
-  m_warp[warp_id]->ibuffer_free_OOO(inst_loc);
+#ifndef free_on_oldest
+  m_warp[warp_id]->ibuffer_free_OOO(index_loc);
+#else
+  m_warp[warp_id]->ibuffer_free_OOO_free_on_oldest(index_loc);
+#endif
 
   //m_warp[warp_id]->set_active_mask(active_mask,id);
   m_warp[warp_id]->set_active_mask(next_inst->get_active_mask(),id);
@@ -2720,6 +2766,20 @@ void scheduler_unit::cycle_ibuffer_OOO(int m_cluster_id, int sched_num) {
 
   replay_stall = 0;
 
+
+#ifdef free_on_oldest
+for (std::vector<shd_warp_t *>::const_iterator iter =
+           m_next_cycle_prioritized_warps.begin();
+       iter != m_next_cycle_prioritized_warps.end(); iter++) {
+
+    if ((*iter) == NULL || (*iter)->done_exit()) {
+      continue;
+    }
+    unsigned warp_id = (*iter)->get_warp_id();
+    m_shader->mark_insts_as_completed(warp_id);
+  }
+#endif
+
   for (std::vector<shd_warp_t *>::const_iterator iter =
            m_next_cycle_prioritized_warps.begin();
        iter != m_next_cycle_prioritized_warps.end(); iter++) {
@@ -2781,8 +2841,6 @@ void scheduler_unit::cycle_ibuffer_OOO(int m_cluster_id, int sched_num) {
 
     int check_if_DEB_ON = 0;
 
-    int locs = warp(warp_id).ibuffer_index_OOO(0,warp_id);
-
     int this_inst_issued = 0;
 
   #ifndef IB_OOO_FULL
@@ -2815,13 +2873,16 @@ void scheduler_unit::cycle_ibuffer_OOO(int m_cluster_id, int sched_num) {
 
         act_warp[m_shader->get_sid()][warp_id] = get_schd_id() + 1;
 
+#ifndef free_on_oldest
         #ifndef IB_OOO_FULL
           inst_loc = warp(warp_id).ibuffer_index_OOO(inst_index,warp_id);
         #endif
         #ifdef IB_OOO_FULL
           inst_loc = warp(warp_id).ibuffer_index_full_OOO(inst_index,warp_id);
         #endif
-
+#else
+        inst_loc = warp(warp_id).ibuffer_index_OOO_free_on_oldest(inst_index,warp_id);
+#endif
         pI = warp(warp_id).ibuffer_next_inst_OOO(inst_loc);
 
         if(warp(warp_id).get_stall_cycle(inst_loc) == -1 && inst_index==0)
@@ -2841,7 +2902,27 @@ void scheduler_unit::cycle_ibuffer_OOO(int m_cluster_id, int sched_num) {
       bool valid = warp(warp_id).ibuffer_next_valid_OOO(inst_loc);
       bool warp_inst_issued = false;
 
+      // if(warp_id == 3 && m_shader->get_sid() == 0)
+      // {
+      //   if(inst_index == 0)
+      //     std::cout<<"*****************\n";
+      //   std::cout<<"INST_HERE4 warp "<<warp_id<<" valid "<<valid<<" inst "<<pI<<" loc "<<warp(warp_id).ibuffer_index_full_OOO(inst_index,warp_id)<<" index "<<inst_index<<" free "<<warp(warp_id).get_inst_as_free(inst_loc)<<" comp "<<warp(warp_id).get_inst_complete(inst_loc)<<"\n"<<std::flush;
+      // }
+
+#ifndef free_on_oldest
       m_shader->get_pdom_stack_top_info(warp_id, pI, &pc, &rpc);
+#else
+      if(valid)
+      {
+        m_shader->get_pdom_stack_top_info(warp_id, pI, &pc, &rpc);
+      }
+      else
+      {
+        inst_index++;
+        continue;
+      }
+
+#endif
       SCHED_DPRINTF(
           "Warp (warp_id %u, dynamic_warp_id %u) has valid instruction (%s)\n",
           (*iter)->get_warp_id(), (*iter)->get_dynamic_warp_id(),
@@ -2962,7 +3043,11 @@ void scheduler_unit::cycle_ibuffer_OOO(int m_cluster_id, int sched_num) {
       // till inst_index becomes 1
       #ifdef IB_OOO_FULL
       // previous control bit should be set
+#ifndef free_on_oldest
         && !(inst_index > 0 && !warp(warp_id).get_control_bit_prev_full_OOO(inst_index-1))
+#else
+        && (!(inst_index > 0 && !warp(warp_id).get_control_bit_prev_full_OOO(inst_index-1)) || (inst_index > 0 && warp(warp_id).no_older_inst_for_issue(inst_index)))
+#endif
       // if inst_index > 0, there should not be any control stalls
         && !(inst_index > 0 && pc != pI->pc)
         // dont check on an inst which has already been checked and marked as control done
@@ -3016,6 +3101,8 @@ void scheduler_unit::cycle_ibuffer_OOO(int m_cluster_id, int sched_num) {
             warp(warp_id).set_ibuffer_inst_number(inst_loc);
             warp(warp_id).ibuffer_increment_inst_number_OOO();
           }
+
+          //std::cout<<"INST_HERE2 "<<warp_id<<" "<<pI<<" "<<inst_loc<<" "<<inst_index<<"\n";
 
           valid_inst = true;
         
@@ -3154,7 +3241,7 @@ void scheduler_unit::cycle_ibuffer_OOO(int m_cluster_id, int sched_num) {
                 {
                   cycles_spent_in_ib = cycles_passed - warp(warp_id).get_ibuffer_pushed_OOO_all(inst_loc);
 
-                 //std::cout<<"VALUE_REORDERING "<<pc_used<<" 0 "<<warp_id<<" "<<m_shader->get_kernel()->get_name()<<" "<<warp(warp_id).ibuffer_cont_inst(inst_loc)<<" "<<warp(warp_id).ibuffer_DEB_bit(inst_loc)<<" "<<(cycles_passed-warp(warp_id).get_ibuffer_pushed_OOO_all(inst_loc))<<" "<<cycles_passed<<"0  \n"<<std::flush;
+                 //std::cout<<"VALUE_REORDERING "<<pc_used<<" 0 "<<warp_id<<" "<<m_shader->get_kernel()->get_name()<<" 0 "<<warp(warp_id).ibuffer_DEB_bit(inst_loc)<<" "<<(cycles_passed-warp(warp_id).get_ibuffer_pushed_OOO_all(inst_loc))<<" "<<cycles_passed<<"0  \n"<<std::flush;
 
                   m_shader->issue_warp_ibuffer_OOO_in_order(*m_mem_out, pI, active_mask, warp_id,
                                      m_id, m_shader->get_sid(),m_cluster_id,inst_loc,inst_index,cycles_spent_in_ib,
@@ -3242,7 +3329,7 @@ void scheduler_unit::cycle_ibuffer_OOO(int m_cluster_id, int sched_num) {
 
                 if (execute_on_SP) {
                   cycles_spent_in_ib = cycles_passed - warp(warp_id).get_ibuffer_pushed_OOO_all(inst_loc);
-                  //std::cout<<"VALUE_REORDERING "<<pc_used<<" 0 "<<warp_id<<" "<<m_shader->get_kernel()->get_name()<<" "<<warp(warp_id).ibuffer_cont_inst(inst_loc)<<" "<<warp(warp_id).ibuffer_DEB_bit(inst_loc)<<" "<<(cycles_passed-warp(warp_id).get_ibuffer_pushed_OOO_all(inst_loc))<<" "<<cycles_passed<<"0 \n"<<std::flush;
+                  //std::cout<<"VALUE_REORDERING "<<pc_used<<" 0 "<<warp_id<<" "<<m_shader->get_kernel()->get_name()<<" 0 "<<warp(warp_id).ibuffer_DEB_bit(inst_loc)<<" "<<(cycles_passed-warp(warp_id).get_ibuffer_pushed_OOO_all(inst_loc))<<" "<<cycles_passed<<"0 \n"<<std::flush;
                   m_shader->issue_warp_ibuffer_OOO_in_order(*m_sp_out, pI, active_mask, warp_id,
                                        m_id, m_shader->get_sid(),m_cluster_id,inst_loc,inst_index,cycles_spent_in_ib,
                                        warp(warp_id).stalled_on_replay,warp(warp_id).stalls_between_issues,
@@ -3256,7 +3343,7 @@ void scheduler_unit::cycle_ibuffer_OOO(int m_cluster_id, int sched_num) {
                   this_inst_issued = 1;
                 } else if (execute_on_INT) {
                   cycles_spent_in_ib = cycles_passed - warp(warp_id).get_ibuffer_pushed_OOO_all(inst_loc);
-                  //std::cout<<"VALUE_REORDERING "<<pc_used<<" 0 "<<warp_id<<" "<<m_shader->get_kernel()->get_name()<<" "<<warp(warp_id).ibuffer_cont_inst(inst_loc)<<" "<<warp(warp_id).ibuffer_DEB_bit(inst_loc)<<" "<<(cycles_passed-warp(warp_id).get_ibuffer_pushed_OOO_all(inst_loc))<<" "<<cycles_passed<<"0 \n"<<std::flush;
+                  //std::cout<<"VALUE_REORDERING "<<pc_used<<" 0 "<<warp_id<<" "<<m_shader->get_kernel()->get_name()<<" 0 "<<warp(warp_id).ibuffer_DEB_bit(inst_loc)<<" "<<(cycles_passed-warp(warp_id).get_ibuffer_pushed_OOO_all(inst_loc))<<" "<<cycles_passed<<"0 \n"<<std::flush;
                   m_shader->issue_warp_ibuffer_OOO_in_order(*m_int_out, pI, active_mask, warp_id,
                                        m_id, m_shader->get_sid(),m_cluster_id,inst_loc,inst_index,cycles_spent_in_ib,
                                        warp(warp_id).stalled_on_replay,warp(warp_id).stalls_between_issues,
@@ -3279,7 +3366,7 @@ void scheduler_unit::cycle_ibuffer_OOO(int m_cluster_id, int sched_num) {
                                                   exec_unit_type_t::DP)) {
                 if (dp_pipe_avail) {
                   cycles_spent_in_ib = cycles_passed - warp(warp_id).get_ibuffer_pushed_OOO_all(inst_loc);
-                  //std::cout<<"VALUE_REORDERING "<<pc_used<<" 0 "<<warp_id<<" "<<m_shader->get_kernel()->get_name()<<" "<<warp(warp_id).ibuffer_cont_inst(inst_loc)<<" "<<warp(warp_id).ibuffer_DEB_bit(inst_loc)<<" "<<(cycles_passed-warp(warp_id).get_ibuffer_pushed_OOO_all(inst_loc))<<" "<<cycles_passed<<"0 \n"<<std::flush;
+                  //std::cout<<"VALUE_REORDERING "<<pc_used<<" 0 "<<warp_id<<" "<<m_shader->get_kernel()->get_name()<<" 0 "<<warp(warp_id).ibuffer_DEB_bit(inst_loc)<<" "<<(cycles_passed-warp(warp_id).get_ibuffer_pushed_OOO_all(inst_loc))<<" "<<cycles_passed<<"0 \n"<<std::flush;
                   m_shader->issue_warp_ibuffer_OOO_in_order(*m_dp_out, pI, active_mask, warp_id,
                                        m_id, m_shader->get_sid(),m_cluster_id,inst_loc,inst_index,cycles_spent_in_ib,
                                        warp(warp_id).stalled_on_replay,warp(warp_id).stalls_between_issues,
@@ -3305,7 +3392,7 @@ void scheduler_unit::cycle_ibuffer_OOO(int m_cluster_id, int sched_num) {
                                                 exec_unit_type_t::SFU)) {
                 if (sfu_pipe_avail) {
                   cycles_spent_in_ib = cycles_passed - warp(warp_id).get_ibuffer_pushed_OOO_all(inst_loc);
-                  //std::cout<<"VALUE_REORDERING "<<pc_used<<" 0 "<<warp_id<<" "<<m_shader->get_kernel()->get_name()<<" "<<warp(warp_id).ibuffer_cont_inst(inst_loc)<<" "<<warp(warp_id).ibuffer_DEB_bit(inst_loc)<<" "<<(cycles_passed-warp(warp_id).get_ibuffer_pushed_OOO_all(inst_loc))<<" "<<cycles_passed<<"0 \n"<<std::flush;
+                  //std::cout<<"VALUE_REORDERING "<<pc_used<<" 0 "<<warp_id<<" "<<m_shader->get_kernel()->get_name()<<" 0 "<<warp(warp_id).ibuffer_DEB_bit(inst_loc)<<" "<<(cycles_passed-warp(warp_id).get_ibuffer_pushed_OOO_all(inst_loc))<<" "<<cycles_passed<<"0 \n"<<std::flush;
                   m_shader->issue_warp_ibuffer_OOO_in_order(*m_sfu_out, pI, active_mask, warp_id,
                                        m_id, m_shader->get_sid(),m_cluster_id,inst_loc,inst_index,cycles_spent_in_ib,
                                        warp(warp_id).stalled_on_replay,warp(warp_id).stalls_between_issues,
@@ -3327,7 +3414,7 @@ void scheduler_unit::cycle_ibuffer_OOO(int m_cluster_id, int sched_num) {
                                                   exec_unit_type_t::TENSOR)) {
                 if (tensor_core_pipe_avail) {
                   cycles_spent_in_ib = cycles_passed - warp(warp_id).get_ibuffer_pushed_OOO_all(inst_loc);
-                  //std::cout<<"VALUE_REORDERING "<<pc_used<<" 0 "<<warp_id<<" "<<m_shader->get_kernel()->get_name()<<" "<<warp(warp_id).ibuffer_cont_inst(inst_loc)<<" "<<warp(warp_id).ibuffer_DEB_bit(inst_loc)<<" "<<(cycles_passed-warp(warp_id).get_ibuffer_pushed_OOO_all(inst_loc))<<" "<<cycles_passed<<"0 \n"<<std::flush;
+                  //std::cout<<"VALUE_REORDERING "<<pc_used<<" 0 "<<warp_id<<" "<<m_shader->get_kernel()->get_name()<<" 0 "<<warp(warp_id).ibuffer_DEB_bit(inst_loc)<<" "<<(cycles_passed-warp(warp_id).get_ibuffer_pushed_OOO_all(inst_loc))<<" "<<cycles_passed<<"0 \n"<<std::flush;
                   m_shader->issue_warp_ibuffer_OOO_in_order(*m_tensor_core_out, pI, active_mask,
                                        warp_id, m_id, m_shader->get_sid(),m_cluster_id,inst_loc,inst_index,cycles_spent_in_ib,
                                        warp(warp_id).stalled_on_replay,warp(warp_id).stalls_between_issues,
@@ -3360,7 +3447,7 @@ void scheduler_unit::cycle_ibuffer_OOO(int m_cluster_id, int sched_num) {
                 if (spec_pipe_avail) {
                   //std::cout<<"IN_ORDER_HERE_SPEC "<<warp_id<<" "<<pI->pc<<" "<<cycles_passed<<"\n";
                   cycles_spent_in_ib = cycles_passed - warp(warp_id).get_ibuffer_pushed_OOO_all(inst_loc);
-                  //std::cout<<"VALUE_REORDERING "<<pc_used<<" 0 "<<warp_id<<" "<<m_shader->get_kernel()->get_name()<<" "<<warp(warp_id).ibuffer_cont_inst(inst_loc)<<" "<<warp(warp_id).ibuffer_DEB_bit(inst_loc)<<" "<<(cycles_passed-warp(warp_id).get_ibuffer_pushed_OOO_all(inst_loc))<<" "<<cycles_passed<<"0 \n"<<std::flush;
+                  //std::cout<<"VALUE_REORDERING "<<pc_used<<" 0 "<<warp_id<<" "<<m_shader->get_kernel()->get_name()<<" 0 "<<warp(warp_id).ibuffer_DEB_bit(inst_loc)<<" "<<(cycles_passed-warp(warp_id).get_ibuffer_pushed_OOO_all(inst_loc))<<" "<<cycles_passed<<"0 \n"<<std::flush;
                   m_shader->issue_warp_ibuffer_OOO_in_order(*spec_reg_set, pI, active_mask, warp_id,
                                        m_id, m_shader->get_sid(),m_cluster_id,inst_loc,inst_index,cycles_spent_in_ib,
                                        warp(warp_id).stalled_on_replay,warp(warp_id).stalls_between_issues,
@@ -4014,12 +4101,16 @@ while (g
 
         //verify_stall(warp_id, previous_issued_inst_exec_type,m_cluster_id);
 
+#ifndef free_on_oldest
       #ifndef IB_OOO_FULL
         inst_loc = warp(warp_id).ibuffer_index_DEB_IB_OOO(replay_index,warp_id);
       #endif
       #ifdef IB_OOO_FULL
         inst_loc = warp(warp_id).ibuffer_index_full_OOO(replay_index,warp_id);
       #endif
+#else
+      inst_loc = warp(warp_id).ibuffer_index_OOO_free_on_oldest(replay_index,warp_id);
+#endif
 
         pI = warp(warp_id).ibuffer_next_inst_OOO(inst_loc);
 
@@ -4291,9 +4382,9 @@ while (g
                   (!diff_exec_units ||
                    previous_issued_inst_exec_type != exec_unit_type_t::MEM)) {
                 
-                //std::cout<<"VALUE_REORDERING "<<pc_used<<" "<<(warp(warp_id).ibuffer_distance(inst_loc) - replay_index)<<" "<<warp_id<<" "<<m_shader->get_kernel()->get_name()<<" "<<warp(warp_id).ibuffer_cont_inst(inst_loc)<<" "<<warp(warp_id).ibuffer_DEB_bit(inst_loc)<<" "<<(cycles_passed-warp(warp_id).get_ibuffer_pushed_OOO_all(inst_loc))<<" "<<cycles_passed<<" "<<replay_index<<"\n"<<std::flush;
+                //std::cout<<"VALUE_REORDERING "<<pc_used<<" "<<(warp(warp_id).ibuffer_distance(inst_loc) - replay_index)<<" "<<warp_id<<" "<<m_shader->get_kernel()->get_name()<<" 0 "<<warp(warp_id).ibuffer_DEB_bit(inst_loc)<<" "<<(cycles_passed-warp(warp_id).get_ibuffer_pushed_OOO_all(inst_loc))<<" "<<cycles_passed<<" "<<replay_index<<"\n"<<std::flush;
 
-                //std::cout<<"VALUE_REORDERING2 "<<pc_used<<" "<<(warp(warp_id).ibuffer_distance(inst_loc) - replay_index)<<" "<<warp_id<<" "<<warp(warp_id).ibuffer_cont_inst(inst_loc)<<" "<<warp(warp_id).ibuffer_DEB_bit(inst_loc)<<" "<<(cycles_passed-warp(warp_id).get_ibuffer_pushed_OOO_all(inst_loc))<<" "<<m_shader->m_gpu->gpu_sim_cycle<<"\n"<<std::flush; 
+                //std::cout<<"VALUE_REORDERING2 "<<pc_used<<" "<<(warp(warp_id).ibuffer_distance(inst_loc) - replay_index)<<" "<<warp_id<<" 0 "<<warp(warp_id).ibuffer_DEB_bit(inst_loc)<<" "<<(cycles_passed-warp(warp_id).get_ibuffer_pushed_OOO_all(inst_loc))<<" "<<m_shader->m_gpu->gpu_sim_cycle<<"\n"<<std::flush; 
 
                 warp(warp_id).increase_inst_reordering_distance(replay_index, warp_id);
                 cycles_spent_in_ib = cycles_passed - warp(warp_id).get_ibuffer_pushed_OOO_all(inst_loc);
@@ -4379,9 +4470,9 @@ while (g
                   cycles_spent_in_ib = cycles_passed - warp(warp_id).get_ibuffer_pushed_OOO_all(inst_loc);
                   
                   int reorder_dist = warp(warp_id).ibuffer_distance(inst_loc) - replay_index;
-                  //std::cout<<"VALUE_REORDERING "<<pc_used<<" "<<reorder_dist<<" "<<warp_id<<" "<<m_shader->get_kernel()->get_name()<<" "<<warp(warp_id).ibuffer_cont_inst(inst_loc)<<" "<<warp(warp_id).ibuffer_DEB_bit(inst_loc)<<" "<<(cycles_passed-warp(warp_id).get_ibuffer_pushed_OOO_all(inst_loc))<<" "<<cycles_passed<<" "<<replay_index<<"\n"<<std::flush;
+                  //std::cout<<"VALUE_REORDERING "<<pc_used<<" "<<reorder_dist<<" "<<warp_id<<" "<<m_shader->get_kernel()->get_name()<<" 0 "<<warp(warp_id).ibuffer_DEB_bit(inst_loc)<<" "<<(cycles_passed-warp(warp_id).get_ibuffer_pushed_OOO_all(inst_loc))<<" "<<cycles_passed<<" "<<replay_index<<"\n"<<std::flush;
 
-                  // std::cout<<"VALUE_REORDERING3 "<<pc_used<<" "<<reorder_dist<<" "<<warp_id<<" "<<warp(warp_id).ibuffer_cont_inst(inst_loc)<<" "<<warp(warp_id).ibuffer_DEB_bit(inst_loc)<<" "<<(cycles_passed-warp(warp_id).get_ibuffer_pushed_OOO_all(inst_loc))<<" "<<m_shader->m_gpu->gpu_sim_cycle<<"\n"<<std::flush;
+                  // std::cout<<"VALUE_REORDERING3 "<<pc_used<<" "<<reorder_dist<<" "<<warp_id<<" 0 "<<warp(warp_id).ibuffer_DEB_bit(inst_loc)<<" "<<(cycles_passed-warp(warp_id).get_ibuffer_pushed_OOO_all(inst_loc))<<" "<<m_shader->m_gpu->gpu_sim_cycle<<"\n"<<std::flush;
 
                   warp(warp_id).increase_inst_reordering_distance(replay_index, warp_id);
                   m_shader->issue_warp_push_from_replay_DEB_IB_OOO(*m_sp_out, pI, active_mask, warp_id,
@@ -4397,9 +4488,9 @@ while (g
                   
                   int reorder_dist = warp(warp_id).ibuffer_distance(inst_loc) - replay_index;
                   
-                  //std::cout<<"VALUE_REORDERING "<<pc_used<<" "<<reorder_dist<<" "<<warp_id<<" "<<m_shader->get_kernel()->get_name()<<" "<<warp(warp_id).ibuffer_cont_inst(inst_loc)<<" "<<warp(warp_id).ibuffer_DEB_bit(inst_loc)<<" "<<(cycles_passed-warp(warp_id).get_ibuffer_pushed_OOO_all(inst_loc))<<" "<<cycles_passed<<" "<<replay_index<<"\n"<<std::flush;
+                  //std::cout<<"VALUE_REORDERING "<<pc_used<<" "<<reorder_dist<<" "<<warp_id<<" "<<m_shader->get_kernel()->get_name()<<" 0 "<<warp(warp_id).ibuffer_DEB_bit(inst_loc)<<" "<<(cycles_passed-warp(warp_id).get_ibuffer_pushed_OOO_all(inst_loc))<<" "<<cycles_passed<<" "<<replay_index<<"\n"<<std::flush;
 
-                  //std::cout<<"VALUE_REORDERING4 "<<pc_used<<" "<<reorder_dist<<" "<<warp_id<<" "<<warp(warp_id).ibuffer_cont_inst(inst_loc)<<" "<<warp(warp_id).ibuffer_DEB_bit(inst_loc)<<" "<<(cycles_passed-warp(warp_id).get_ibuffer_pushed_OOO_all(inst_loc))<<" "<<m_shader->m_gpu->gpu_sim_cycle<<"\n"<<std::flush;
+                  //std::cout<<"VALUE_REORDERING4 "<<pc_used<<" "<<reorder_dist<<" "<<warp_id<<" 0 "<<warp(warp_id).ibuffer_DEB_bit(inst_loc)<<" "<<(cycles_passed-warp(warp_id).get_ibuffer_pushed_OOO_all(inst_loc))<<" "<<m_shader->m_gpu->gpu_sim_cycle<<"\n"<<std::flush;
 
                   warp(warp_id).increase_inst_reordering_distance(replay_index, warp_id);
                   m_shader->issue_warp_push_from_replay_DEB_IB_OOO(*m_int_out, pI, active_mask, warp_id,
@@ -4422,9 +4513,9 @@ while (g
                   cycles_spent_in_ib = cycles_passed - warp(warp_id).get_ibuffer_pushed_OOO_all(inst_loc);
                   
                   int reorder_dist = warp(warp_id).ibuffer_distance(inst_loc) - replay_index;
-                 //std::cout<<"VALUE_REORDERING "<<pc_used<<" "<<reorder_dist<<" "<<warp_id<<" "<<m_shader->get_kernel()->get_name()<<" "<<warp(warp_id).ibuffer_cont_inst(inst_loc)<<" "<<warp(warp_id).ibuffer_DEB_bit(inst_loc)<<" "<<(cycles_passed-warp(warp_id).get_ibuffer_pushed_OOO_all(inst_loc))<<" "<<cycles_passed<<" "<<replay_index<<"\n"<<std::flush;
+                 //std::cout<<"VALUE_REORDERING "<<pc_used<<" "<<reorder_dist<<" "<<warp_id<<" "<<m_shader->get_kernel()->get_name()<<" 0 "<<warp(warp_id).ibuffer_DEB_bit(inst_loc)<<" "<<(cycles_passed-warp(warp_id).get_ibuffer_pushed_OOO_all(inst_loc))<<" "<<cycles_passed<<" "<<replay_index<<"\n"<<std::flush;
 
-                // std::cout<<"VALUE_REORDERING5 "<<pc_used<<" "<<reorder_dist<<" "<<warp_id<<" "<<warp(warp_id).ibuffer_cont_inst(inst_loc)<<" "<<warp(warp_id).ibuffer_DEB_bit(inst_loc)<<" "<<(cycles_passed-warp(warp_id).get_ibuffer_pushed_OOO_all(inst_loc))<<" "<<m_shader->m_gpu->gpu_sim_cycle<<"\n"<<std::flush;
+                // std::cout<<"VALUE_REORDERING5 "<<pc_used<<" "<<reorder_dist<<" "<<warp_id<<" 0 "<<warp(warp_id).ibuffer_DEB_bit(inst_loc)<<" "<<(cycles_passed-warp(warp_id).get_ibuffer_pushed_OOO_all(inst_loc))<<" "<<m_shader->m_gpu->gpu_sim_cycle<<"\n"<<std::flush;
 
                   warp(warp_id).increase_inst_reordering_distance(replay_index, warp_id);
                   m_shader->issue_warp_push_from_replay_DEB_IB_OOO(*m_dp_out, pI, active_mask, warp_id,
@@ -4450,8 +4541,8 @@ while (g
                   cycles_spent_in_ib = cycles_passed - warp(warp_id).get_ibuffer_pushed_OOO_all(inst_loc);
                   
                   int reorder_dist = warp(warp_id).ibuffer_distance(inst_loc) - replay_index;
-                  //std::cout<<"VALUE_REORDERING "<<pc_used<<" "<<reorder_dist<<" "<<warp_id<<" "<<m_shader->get_kernel()->get_name()<<" "<<warp(warp_id).ibuffer_cont_inst(inst_loc)<<" "<<warp(warp_id).ibuffer_DEB_bit(inst_loc)<<" "<<(cycles_passed-warp(warp_id).get_ibuffer_pushed_OOO_all(inst_loc))<<" "<<cycles_passed<<" "<<replay_index<<"\n"<<std::flush;
-                  //std::cout<<"VALUE_REORDERING6 "<<pc_used<<" "<<reorder_dist<<" "<<warp_id<<" "<<warp(warp_id).ibuffer_cont_inst(inst_loc)<<" "<<warp(warp_id).ibuffer_DEB_bit(inst_loc)<<" "<<(cycles_passed-warp(warp_id).get_ibuffer_pushed_OOO_all(inst_loc))<<" "<<m_shader->m_gpu->gpu_sim_cycle<<"\n"<<std::flush;
+                  //std::cout<<"VALUE_REORDERING "<<pc_used<<" "<<reorder_dist<<" "<<warp_id<<" "<<m_shader->get_kernel()->get_name()<<" 0 "<<warp(warp_id).ibuffer_DEB_bit(inst_loc)<<" "<<(cycles_passed-warp(warp_id).get_ibuffer_pushed_OOO_all(inst_loc))<<" "<<cycles_passed<<" "<<replay_index<<"\n"<<std::flush;
+                  //std::cout<<"VALUE_REORDERING6 "<<pc_used<<" "<<reorder_dist<<" "<<warp_id<<" 0 "<<warp(warp_id).ibuffer_DEB_bit(inst_loc)<<" "<<(cycles_passed-warp(warp_id).get_ibuffer_pushed_OOO_all(inst_loc))<<" "<<m_shader->m_gpu->gpu_sim_cycle<<"\n"<<std::flush;
                   
                   warp(warp_id).increase_inst_reordering_distance(replay_index, warp_id);
                   m_shader->issue_warp_push_from_replay_DEB_IB_OOO(*m_sfu_out, pI, active_mask, warp_id,
@@ -4482,8 +4573,8 @@ while (g
                   // }
                   
                   int reorder_dist = warp(warp_id).ibuffer_distance(inst_loc) - replay_index;
-                  //std::cout<<"VALUE_REORDERING "<<pc_used<<" "<<reorder_dist<<" "<<warp_id<<" "<<m_shader->get_kernel()->get_name()<<" "<<warp(warp_id).ibuffer_cont_inst(inst_loc)<<" "<<warp(warp_id).ibuffer_DEB_bit(inst_loc)<<" "<<(cycles_passed-warp(warp_id).get_ibuffer_pushed_OOO_all(inst_loc))<<" "<<cycles_passed<<" "<<replay_index<<"\n"<<std::flush;
-                  //std::cout<<"VALUE_REORDERING7 "<<pc_used<<" "<<reorder_dist<<" "<<warp_id<<" "<<warp(warp_id).ibuffer_cont_inst(inst_loc)<<" "<<warp(warp_id).ibuffer_DEB_bit(inst_loc)<<" "<<(cycles_passed-warp(warp_id).get_ibuffer_pushed_OOO_all(inst_loc))<<" "<<m_shader->m_gpu->gpu_sim_cycle<<"\n"<<std::flush;
+                  //std::cout<<"VALUE_REORDERING "<<pc_used<<" "<<reorder_dist<<" "<<warp_id<<" "<<m_shader->get_kernel()->get_name()<<" 0 "<<warp(warp_id).ibuffer_DEB_bit(inst_loc)<<" "<<(cycles_passed-warp(warp_id).get_ibuffer_pushed_OOO_all(inst_loc))<<" "<<cycles_passed<<" "<<replay_index<<"\n"<<std::flush;
+                  //std::cout<<"VALUE_REORDERING7 "<<pc_used<<" "<<reorder_dist<<" "<<warp_id<<" 0 "<<warp(warp_id).ibuffer_DEB_bit(inst_loc)<<" "<<(cycles_passed-warp(warp_id).get_ibuffer_pushed_OOO_all(inst_loc))<<" "<<m_shader->m_gpu->gpu_sim_cycle<<"\n"<<std::flush;
                   
                   warp(warp_id).increase_inst_reordering_distance(replay_index, warp_id);
                   m_shader->issue_warp_push_from_replay_DEB_IB_OOO(*m_tensor_core_out, pI, active_mask,
@@ -4525,8 +4616,8 @@ while (g
                   // }
 
                   int reorder_dist = warp(warp_id).ibuffer_distance(inst_loc) - replay_index;
-                  //std::cout<<"VALUE_REORDERING "<<pc_used<<" "<<reorder_dist<<" "<<warp_id<<" "<<m_shader->get_kernel()->get_name()<<" "<<warp(warp_id).ibuffer_cont_inst(inst_loc)<<" "<<warp(warp_id).ibuffer_DEB_bit(inst_loc)<<" "<<(cycles_passed-warp(warp_id).get_ibuffer_pushed_OOO_all(inst_loc))<<" "<<cycles_passed<<" "<<replay_index<<"\n"<<std::flush;
-                  //std::cout<<"VALUE_REORDERING8 "<<pc_used<<" "<<reorder_dist<<" "<<warp_id<<" "<<warp(warp_id).ibuffer_cont_inst(inst_loc)<<" "<<warp(warp_id).ibuffer_DEB_bit(inst_loc)<<" "<<(cycles_passed-warp(warp_id).get_ibuffer_pushed_OOO_all(inst_loc))<<" "<<m_shader->m_gpu->gpu_sim_cycle<<"\n"<<std::flush;
+                  //std::cout<<"VALUE_REORDERING "<<pc_used<<" "<<reorder_dist<<" "<<warp_id<<" "<<m_shader->get_kernel()->get_name()<<" 0 "<<warp(warp_id).ibuffer_DEB_bit(inst_loc)<<" "<<(cycles_passed-warp(warp_id).get_ibuffer_pushed_OOO_all(inst_loc))<<" "<<cycles_passed<<" "<<replay_index<<"\n"<<std::flush;
+                  //std::cout<<"VALUE_REORDERING8 "<<pc_used<<" "<<reorder_dist<<" "<<warp_id<<" 0 "<<warp(warp_id).ibuffer_DEB_bit(inst_loc)<<" "<<(cycles_passed-warp(warp_id).get_ibuffer_pushed_OOO_all(inst_loc))<<" "<<m_shader->m_gpu->gpu_sim_cycle<<"\n"<<std::flush;
                   
                   warp(warp_id).increase_inst_reordering_distance(replay_index, warp_id);
                   m_shader->issue_warp_push_from_replay_DEB_IB_OOO(*spec_reg_set, pI, active_mask, warp_id,
@@ -5005,6 +5096,66 @@ void shader_core_ctx::warp_inst_complete(const warp_inst_t &inst) {
     mem_inst_in_flight--;
   }
   inst.completed(m_gpu->gpu_tot_sim_cycle + m_gpu->gpu_sim_cycle);
+
+#ifdef free_on_oldest
+  int inst_loc = inst.get_issued_loc();
+  int warp = inst.warp_id();
+  int inst_index = m_warp[warp]->get_index_of_loc(inst_loc);
+  int sid = inst.get_sid();
+
+  // mark the instruction as complete
+  m_warp[warp]->set_inst_complete(inst_loc);
+
+  // if(warp == 3 && sid == 0)
+  //   std::cout<<"COMPLETING_VALS1 idx "<<inst_index<<" loc "<<inst_loc<<" warp "<<warp<<" complete "<<m_warp[warp]->get_inst_complete(inst_loc)<<" pI "<<&inst<<"\n";
+#endif
+}
+
+void shader_core_ctx::mark_insts_as_completed(int warp)
+{
+  // if index 0 is writing back, mark these instructions as invalid till we reach an instruction which has not written back yet
+  // go over all the entries and check which have completed
+  for(int i=0; i< m_config->ib_size_config; i++)
+  {
+    int check_idx = 0; // this has to be zero as we keep moving indexes up as we remove instructions
+    int loc = m_warp[warp]->ibuffer_index_OOO_free_on_oldest(check_idx,warp);
+
+    if(m_warp[warp]->get_inst_complete(loc) && (loc >= 0))
+    {
+      // m_warp[warp]->ibuffer_decrease_all_index_free_on_oldest(i, warp);
+      // m_warp[warp]->ibuffer_decrement_tail_full_OOO();
+      // m_warp[warp]->replay_buffer_decrement_tail_IB_DEB_OOO();
+
+      // issue was in-order
+      if(m_warp[warp]->get_inst_as_free(loc) == 2)
+      {
+        // if(warp == 3 && get_sid() == 0)
+        // std::cout<<"RELASING_VALS1_IN idx "<<i<<" loc "<<loc<<" warp "<<warp<<" complete "<<m_warp[warp]->get_inst_complete(loc)<<"\n";
+        m_warp[warp]->ibuffer_decrement_tail_OOO();
+        m_warp[warp]->ibuffer_decrease_all_index_free_on_oldest(check_idx, warp);
+        m_warp[warp]->ibuffer_decrement_tail_full_OOO();
+      }
+      else if(m_warp[warp]->get_inst_as_free(loc) == 3)
+      {
+        // if(warp == 3 && get_sid() == 0)
+        // std::cout<<"RELASING_VALS1_OOO idx "<<i<<" loc "<<loc<<" warp "<<warp<<" complete "<<m_warp[warp]->get_inst_complete(loc)<<"\n";
+        m_warp[warp]->replay_buffer_decrement_tail_IB_DEB_OOO();
+        m_warp[warp]->ibuffer_decrease_all_index_free_on_oldest(check_idx, warp);
+        m_warp[warp]->ibuffer_decrement_tail_full_OOO();
+      }
+      else
+      {
+        std::cout<<"ERROR_VAL "<<warp<<" idx "<<i<<" loc "<<loc<<" val "<<m_warp[warp]->get_inst_as_free(loc)<<" get_sid() "<<get_sid()<<"\n"<<std::flush;
+        assert(0);
+      }
+      m_warp[warp]->set_inst_incomplete(loc);
+      m_warp[warp]->set_inst_as_free(loc);
+    }
+    else
+    {
+      break;
+    }
+  }
 }
 
 void shader_core_ctx::writeback() {

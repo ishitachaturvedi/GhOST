@@ -400,6 +400,24 @@ class shd_warp_t {
     return false;	
   }
 
+  bool ibuffer_has_space_streaming_empty_on_WB() const {
+    //int total_size = IBUFFER_SIZE_IN_ORDER + IBUFFER_SIZE_OOO_ORDER;
+    int total_size = ibuffer_OOO.size();
+    for (unsigned i = 0; i < total_size; i++)	
+      if (!ibuffer_OOO[i].m_index_full_OOO) 	
+        return true;
+    return false;	
+  }
+
+  int val_ibuffer_has_space_streaming_empty_on_WB() const {
+    //int total_size = IBUFFER_SIZE_IN_ORDER + IBUFFER_SIZE_OOO_ORDER;
+    int total_size = ibuffer_OOO.size();
+    for (unsigned i = 0; i < total_size; i++)	
+      if (!ibuffer_OOO[i].m_index_full_OOO) 	
+        return i;
+    return -1;	
+  }
+
   bool ibuffer_1_has_space_streaming_full_OOO() const {
     //int total_size = IBUFFER_SIZE_IN_ORDER + IBUFFER_SIZE_OOO_ORDER;
     int total_size = ibuffer_OOO_1.size();
@@ -432,18 +450,17 @@ class shd_warp_t {
   }
 
   void ibuffer_fill_OOO(unsigned slot, const warp_inst_t *pI, int PC,int tail,int tail_full_OOO, int num_stores,int warp, int mem_count, int m_control_count, int cycle, int predicate_inst) {	
-
     //assert(slot < IBUFFER_SIZE_IN_ORDER);	
     ibuffer_OOO[slot].m_inst = pI;	
     ibuffer_OOO[slot].m_valid = true;	
     ibuffer_OOO[slot].m_pc = PC;
     ibuffer_OOO[slot].m_index = tail;
-    ibuffer_OOO[slot].m_index_full_OOO = tail_full_OOO;
+    ibuffer_OOO[slot].m_index_full_OOO = 1; // use this to keep track of valid instructions which might be issued but cannot be removed from the IB till the oldest inst has a writeback
     ibuffer_OOO[slot].m_stores = num_stores;	
     ibuffer_OOO[slot].m_meminst = mem_count;
     ibuffer_OOO[slot].control_check = 0;
     ibuffer_OOO[slot].control_check_in_order = m_control_count;
-    ibuffer_OOO[slot].m_control_inst_OOO = 0;
+    ibuffer_OOO[slot].m_control_inst_OOO = false; // mark instruction as true once is completes execution so we can remove instructions from IB correctly
     ibuffer_OOO[slot].m_pushed_in_OOO = cycle;
     ibuffer_OOO[slot].m_DEB_bit = predicate_inst;
     ibuffer_OOO[slot].m_inst_number = -1;
@@ -462,7 +479,7 @@ class shd_warp_t {
     ibuffer_OOO[slot].m_stores = ibuffer_OOO[index].m_stores;	
     ibuffer_OOO[slot].m_meminst = ibuffer_OOO[index].m_meminst;
     ibuffer_OOO[slot].control_check = ibuffer_OOO[index].control_check;
-    ibuffer_OOO[slot].m_control_inst_OOO = ibuffer_OOO[index].m_control_inst_OOO;
+    ibuffer_OOO[slot].m_control_inst_OOO = false;
     ibuffer_OOO[slot].m_pushed_out = ibuffer_OOO[index].m_pushed_out;
     ibuffer_OOO[slot].m_pushed_in_OOO = ibuffer_OOO[index].m_pushed_in_OOO;
     ibuffer_OOO[slot].m_DEB_bit = ibuffer_OOO[index].m_DEB_bit;
@@ -567,7 +584,53 @@ class shd_warp_t {
       }
     }
   }
-  
+
+  void set_inst_complete(int idx)
+  {
+    ibuffer_OOO[idx].m_control_inst_OOO = true;
+  }
+
+  void set_inst_incomplete(int idx)
+  {
+    ibuffer_OOO[idx].m_control_inst_OOO = false;
+  }
+
+  int get_inst_complete(int idx)
+  {
+    return ibuffer_OOO[idx].m_control_inst_OOO;
+  }
+
+  void set_inst_as_free(int idx)
+  {
+    ibuffer_OOO[idx].m_index_full_OOO = false;
+  }
+
+  void set_inst_in_or_OOO(int idx, int val)
+  {
+    ibuffer_OOO[idx].m_index_full_OOO = val;
+  }
+
+  int get_inst_as_free(int idx)
+  {
+    return ibuffer_OOO[idx].m_index_full_OOO;
+  }
+
+  bool no_older_inst_for_issue(int inst_index)
+  {
+    int tot_size = ibuffer_OOO.size();
+    for (unsigned i = 0; i < tot_size ; i++)	
+    {
+      int index = ibuffer_OOO[i].m_index;
+      if (ibuffer_OOO[i].m_index_full_OOO && (index < inst_index))	
+        return false;	
+    }
+    return true;	
+  }
+
+  int get_index_of_loc(int loc)
+  {
+    return ibuffer_OOO[loc].m_index;
+  }
 
   int get_ibuffer_pushed_OOO_all(unsigned slot)
   {
@@ -584,7 +647,6 @@ class shd_warp_t {
   }
 
   int ibuffer_empty_idx_FULL_OOO() {	
-    //int tot_size = IBUFFER_SIZE_IN_ORDER + IBUFFER_SIZE_OOO_ORDER;
     int tot_size = ibuffer_OOO.size();
     for (unsigned i = 0; i < tot_size ; i++)	
       if (!ibuffer_OOO[i].m_valid)	
@@ -592,8 +654,15 @@ class shd_warp_t {
     return -1;	
   }
 
+  int ibuffer_empty_idx_keep_in_IB() {	
+    int tot_size = ibuffer_OOO.size();
+    for (unsigned i = 0; i < tot_size ; i++)	
+      if (!ibuffer_OOO[i].m_index_full_OOO)	
+        return i;	
+    return -1;	
+  }
+
   int ibuffer_1_empty_idx_FULL_OOO() {	
-    //int tot_size = IBUFFER_SIZE_IN_ORDER + IBUFFER_SIZE_OOO_ORDER;
     int tot_size = ibuffer_OOO_1.size();
     for (unsigned i = 0; i < tot_size ; i++)	
       if (!ibuffer_OOO_1[i].m_valid)	
@@ -771,11 +840,11 @@ class shd_warp_t {
         ibuffer_OOO[i].m_valid = false;	
         ibuffer_OOO[i].m_pc = NULL;	
         ibuffer_OOO[i].m_index = -1;
-        ibuffer_OOO[i].m_index_full_OOO = -1;
+        ibuffer_OOO[i].m_index_full_OOO = false;
         ibuffer_OOO[i].m_stores = 0;
         ibuffer_OOO[i].m_meminst = 0;
         ibuffer_OOO[i].control_check = 0;
-        ibuffer_OOO[i].m_control_inst_OOO = 0;
+        ibuffer_OOO[i].m_control_inst_OOO = false;
         ibuffer_OOO[i].m_pushed_out = 0;
         ibuffer_OOO[i].m_DEB_bit = 0;
         ibuffer_OOO[i].mem_dep = -1;
@@ -804,11 +873,11 @@ class shd_warp_t {
         ibuffer_OOO[i].m_valid = false;	
         ibuffer_OOO[i].m_pc = NULL;	
         ibuffer_OOO[i].m_index = -1;
-        ibuffer_OOO[i].m_index_full_OOO = -1;
+        ibuffer_OOO[i].m_index_full_OOO = false;
         ibuffer_OOO[i].m_stores = 0;
         ibuffer_OOO[i].m_meminst = 0;
         ibuffer_OOO[i].control_check = 0;
-        ibuffer_OOO[i].m_control_inst_OOO = 0;
+        ibuffer_OOO[i].m_control_inst_OOO = false;
         ibuffer_OOO[i].m_pushed_out = 0;
         ibuffer_OOO[i].control_check_in_order = 0;
         ibuffer_OOO[i].m_DEB_bit = 0;
@@ -837,6 +906,16 @@ class shd_warp_t {
     for (unsigned i = 0; i < IBUFFER_SIZE_IN_ORDER; i++)	
     {
       if (ibuffer_OOO[i].m_index == index)
+        return i;
+    }  
+    return -1;
+  }
+
+  int ibuffer_index_OOO_free_on_oldest(int index, int warp)
+  {
+    for (unsigned i = 0; i < IBUFFER_SIZE_IN_ORDER; i++)	
+    {
+      if (ibuffer_OOO[i].m_index == index && ibuffer_OOO[i].m_index_full_OOO)
         return i;
     }  
     return -1;
@@ -911,12 +990,32 @@ class shd_warp_t {
     ibuffer_OOO[index].m_inst = NULL;	
     ibuffer_OOO[index].m_valid = false;	
     ibuffer_OOO[index].m_pc = NULL;
-    ibuffer_OOO[index].m_index = -1;
-    ibuffer_OOO[index].m_index_full_OOO = -1;
+    ibuffer_OOO[index].m_index = -1; // done for free_on_oldest
+    //ibuffer_OOO[index].m_index_full_OOO =false;
     ibuffer_OOO[index].m_stores = 0;
     ibuffer_OOO[index].m_meminst = 0;
     ibuffer_OOO[index].control_check = 0;
-    ibuffer_OOO[index].m_control_inst_OOO = 0;
+    //ibuffer_OOO[index].m_control_inst_OOO = false;
+    ibuffer_OOO[index].m_pushed_out = 0;
+    ibuffer_OOO[index].control_check_in_order = 0;
+    ibuffer_OOO[index].m_DEB_bit = 0;
+    ibuffer_OOO[index].mem_dep = -1;
+    ibuffer_OOO[index].m_pushed_in_OOO = 0;
+    ibuffer_OOO[index].m_inst_number = 0;
+    ibuffer_OOO[index].m_stall_cycles = -1;
+  }	
+
+
+  void ibuffer_free_OOO_free_on_oldest(int index) {	
+    ibuffer_OOO[index].m_inst = NULL;	
+    ibuffer_OOO[index].m_valid = false;	
+    ibuffer_OOO[index].m_pc = NULL;
+    //ibuffer_OOO[index].m_index = -1; // done for free_on_oldest
+    //ibuffer_OOO[index].m_index_full_OOO =false;
+    ibuffer_OOO[index].m_stores = 0;
+    ibuffer_OOO[index].m_meminst = 0;
+    ibuffer_OOO[index].control_check = 0;
+    //ibuffer_OOO[index].m_control_inst_OOO = false;
     ibuffer_OOO[index].m_pushed_out = 0;
     ibuffer_OOO[index].control_check_in_order = 0;
     ibuffer_OOO[index].m_DEB_bit = 0;
@@ -1322,12 +1421,6 @@ class shd_warp_t {
     return ibuffer_memory_inst;
   }
 
-  // how many stalled cycles spent
-  int ibuffer_cont_inst(int index)
-  {
-    return ibuffer_OOO[index].m_control_inst_OOO;
-  }
-
   int ibuffer_distance(int index)
   {
     return ibuffer_OOO[index].m_pushed_out;
@@ -1340,17 +1433,8 @@ class shd_warp_t {
     {
       if(ibuffer_OOO[i].m_valid && (ibuffer_OOO[i].m_index < index))
       {
-        //ibuffer_OOO[i].m_control_inst_OOO++;
         ibuffer_OOO[i].m_pushed_out++;
       }
-    }
-  }
-
-  int increase_inst_reordering_distance_given_indexes(std::vector<int> index_list, int warp_id)
-  {
-    for (unsigned i = 0; i < index_list.size(); i++)
-    {
-      ibuffer_OOO[index_list[i]].m_control_inst_OOO++;
     }
   }
 
@@ -1433,7 +1517,6 @@ class shd_warp_t {
 
   void ibuffer_decrease_all_index_OOO(int index, int warp)
   {
-
     for (unsigned i = 0; i < IBUFFER_SIZE; i++)
     {
       if(ibuffer_OOO[i].m_valid && (ibuffer_OOO[i].m_index > index))
@@ -1441,10 +1524,30 @@ class shd_warp_t {
     }
   }
 
+  void ibuffer_decrease_all_index_free_on_oldest(int index, int warp)
+  {
+    // if(warp == 3)
+    //   std::cout<<"red_index "<<index<<"\n";
+    for (unsigned i = 0; i < IBUFFER_SIZE; i++)
+    {
+      // if(warp == 3)
+      //   std::cout<<"old_val "<<ibuffer_OOO[i].m_index<<" ";
+      if((ibuffer_OOO[i].m_index > index))
+      {
+        ibuffer_OOO[i].m_index = ibuffer_OOO[i].m_index - 1;
+        // if(warp == 3)
+        //   std::cout<<"changing_val "<<ibuffer_OOO[i].m_index<<"\n";
+      }
+      else
+      {
+        // if(warp == 3)
+        //   std::cout<<"old_val "<<ibuffer_OOO[i].m_index<<"\n";
+      }
+    }
+  }
 
   void ibuffer_decrease_all_index_IB_IN_OOO(int index, int warp)
   {
-
     for (unsigned i = 0; i < IBUFFER_SIZE_IN_ORDER; i++)
     {
       if(ibuffer_OOO[i].m_valid && (ibuffer_OOO[i].m_index > index))
@@ -1630,11 +1733,11 @@ class shd_warp_t {
       m_inst = NULL;	
       m_pc = NULL;
       m_index = -1;	
-      m_index_full_OOO = -1;	
+      m_index_full_OOO = false;	
       m_stores = 0;
       m_meminst = 0;
       control_check = 0;
-      m_control_inst_OOO = 0;
+      m_control_inst_OOO = false;
       m_active_mask;
       m_pushed_in_OOO = 0;
       m_pushed_out = 0;
@@ -3882,6 +3985,8 @@ class shader_core_ctx : public core_t {
 
   void decode();
   void PutInstInIB2(int warp);
+
+  void mark_insts_as_completed(int warp);
 
   void issue();
   friend class scheduler_unit;  // this is needed to use private issue warp.
