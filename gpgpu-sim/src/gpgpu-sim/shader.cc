@@ -995,6 +995,7 @@ void shader_core_ctx::PutInstInIB2(int warp_id)
 {
 #ifdef TWO_STAGE_IB
   int tail, num_stores, mem_count, nonMemSync, tail_full_OOO, inst_counter, predicate_inst;
+  long long inst_number;
   // put instructions in IB2 if it has space
   int IB1_index = 0;
 
@@ -1042,18 +1043,12 @@ void shader_core_ctx::PutInstInIB2(int warp_id)
       mem_count = m_warp[warp_id]->ibuffer_get_memory_count();
       nonMemSync = m_warp[warp_id]->ibuffer_get_control_inst_OOO();
       predicate_inst = m_warp[warp_id]->ibuffer_get_predicate_inst_OOO();
-    // if(warp_id == 3)
-    //   std::cout<<"IN_HERE1 "<<warp_id<<" "<<pI<<" pos "<<pos<<" pc "<<pc<<" tail "<<tail<<" "<<tail_full_OOO<<" "<<m_warp[warp_id]->val_ibuffer_has_space_streaming_empty_on_WB()<<" "<<m_warp[warp_id]->ibuffer_has_space_streaming_empty_on_WB()<<"\n";
-      m_warp[warp_id]->ibuffer_fill_OOO(pos,pI,pc,tail,tail_full_OOO,num_stores,warp_id,mem_count,nonMemSync,cycles_passed,predicate_inst);
+      inst_number = m_warp[warp_id]->get_inst_counter();
+      m_warp[warp_id]->ibuffer_fill_OOO(pos,pI,pc,tail,tail_full_OOO,num_stores,warp_id,mem_count,nonMemSync,cycles_passed,predicate_inst,inst_number);
       m_warp[warp_id]->inc_inst_in_pipeline();
       // increase tail
       m_warp[warp_id]->ibuffer_increment_tail_OOO();
       m_warp[warp_id]->ibuffer_increment_tail_full_OOO();
-
-    // if(warp_id == 3)
-    // {
-    //   std::cout<<"IN_HERE2 warp "<<warp_id<<" valid "<<m_warp[warp_id]->ibuffer_next_valid_OOO(pos)<<" inst "<<pI<<" loc "<<pos<<" index "<<m_warp[warp_id]->get_index_of_loc(pos)<<" free "<<m_warp[warp_id]->get_inst_as_free(pos)<<" comp "<<m_warp[warp_id]->get_inst_complete(pos)<<"\n"<<std::flush;
-    // }
 
       // increase num_stores
       if(pI->op==STORE_OP || pI->op==TENSOR_CORE_STORE_OP)
@@ -1085,6 +1080,8 @@ void shader_core_ctx::PutInstInIB2(int warp_id)
       } else if (pI->oprnd_type == FP_OP) {
         m_stats->m_num_FPdecoded_insn[m_sid]++;
       }
+
+      m_warp[warp_id]->increase_inst_counter();
     }
     IB1_index++;
   }
@@ -1847,8 +1844,6 @@ void shader_core_ctx::issue_warp_ibuffer_OOO_in_order(register_set &pipe_reg_set
 #endif
  
   //std::cout <<"INST_ISSUE_CYCLE_IN_ORDER "<<next_inst->pc<<" "<<next_inst->op<<" "<<(cycles_passed-m_warp[warp_id]->get_stall_cycle(index_loc))<<"\n";
-  // if(warp_id == 3)
-  //   std::cout<<"IN_ORDER_ISSUE "<<warp_id<<" "<<next_inst<<" "<<index_loc<<" "<<index_num<<"\n";
 #ifdef IB_OOO_FULL
   // check if instruction is a branch inst, if yes, reduce the branch inst counter
   if(next_inst->op == BRANCH_OP || next_inst->branching_inst == 1)
@@ -1881,6 +1876,11 @@ void shader_core_ctx::issue_warp_ibuffer_OOO_in_order(register_set &pipe_reg_set
   **pipe_reg = *next_inst;  // static instruction information
   (*pipe_reg)->set_sid(sid);
   (*pipe_reg)->set_wid(warp_id);
+  // const warp_inst_t *next_inst1 = m_warp[warp_id]->ibuffer_next_inst_OOO(index_loc);
+  // uintptr_t address_as_integer = reinterpret_cast<uintptr_t>(next_inst1);
+  // (*pipe_reg)->m_checked_for_dep = address_as_integer;
+  (*pipe_reg)->inst_counter = m_warp[warp_id]->get_instruction_counter(index_loc);
+  //std::cout<<"COMPARE_VAL2 "<<(*pipe_reg)->m_checked_for_dep<<" "<<address_as_integer<<" "<<reinterpret_cast<uintptr_t>(next_inst1)<<" "<<next_inst1<<"\n";
   (*pipe_reg)->set_cluster_id(m_cluster_id);
   (*pipe_reg)->set_cycle_issued(cycles_passed);
   (*pipe_reg)->set_issued_loc(index_loc);
@@ -1994,13 +1994,7 @@ void shader_core_ctx::issue_warp_push_from_replay_DEB_IB_OOO(register_set &pipe_
   m_warp[warp_id]->set_inst_in_or_OOO(index_loc,3);
 #endif
 
-  // if(index_num == 0 && warp_id == 0 && m_cluster_id == 0 && m_sid == 0)
-  //   std::cout<<"Issue_inorder "<< std::hex << next_inst->pc<<" "<<std::dec<<next_inst->op<<" "<<warp_id<<" "<<index_num<<"\n";
-  // else if(warp_id == 0 && m_cluster_id == 0 && m_sid == 0)
-  //   std::cout<<"Issue_OOO "<< std::hex <<next_inst->pc<<" "<<std::dec<<next_inst->op<<" "<<warp_id<<" "<<index_num<<"\n";
   //std::cout <<"INST_ISSUE_CYCLE_OOO "<<next_inst->pc<<" "<<next_inst->op<<" "<<(cycles_passed-m_warp[warp_id]->get_stall_cycle(index_loc))<<"\n";
-  // if(warp_id == 3)
-  //   std::cout<<"OO_ORDER_ISSUE warp "<<warp_id<<" inst "<<next_inst<<" loc "<<index_loc<<" idx "<<index_num<<"\n";
 #ifdef IB_OOO_FULL
   // check if instruction is a branch inst, if yes, reduce the branch inst counter
   if(next_inst->op == BRANCH_OP || next_inst->branching_inst == 1)
@@ -2030,6 +2024,11 @@ void shader_core_ctx::issue_warp_push_from_replay_DEB_IB_OOO(register_set &pipe_
   assert(next_inst->valid());
   **pipe_reg = *next_inst;  // static instruction information
   (*pipe_reg)->set_sid(sid);
+  // const warp_inst_t *next_inst1 = m_warp[warp_id]->ibuffer_next_inst_OOO(index_loc);
+  // uintptr_t address_as_integer = reinterpret_cast<uintptr_t>(next_inst1);
+  // (*pipe_reg)->m_checked_for_dep = address_as_integer;
+  (*pipe_reg)->inst_counter = m_warp[warp_id]->get_instruction_counter(index_loc);
+  //std::cout<<"COMPARE_VAL1 "<<(*pipe_reg)->m_checked_for_dep<<" "<<address_as_integer<<" "<<reinterpret_cast<uintptr_t>(next_inst1)<<" "<<next_inst1<<"\n";
   (*pipe_reg)->set_wid(warp_id);
   (*pipe_reg)->set_cluster_id(m_cluster_id);
   (*pipe_reg)->set_cycle_issued(cycles_passed);
@@ -2901,13 +2900,6 @@ for (std::vector<shd_warp_t *>::const_iterator iter =
       //bool valid = warp(warp_id).ibuffer_next_valid();
       bool valid = warp(warp_id).ibuffer_next_valid_OOO(inst_loc);
       bool warp_inst_issued = false;
-
-      // if(warp_id == 3 && m_shader->get_sid() == 0)
-      // {
-      //   if(inst_index == 0)
-      //     std::cout<<"*****************\n";
-      //   std::cout<<"INST_HERE4 warp "<<warp_id<<" valid "<<valid<<" inst "<<pI<<" loc "<<warp(warp_id).ibuffer_index_full_OOO(inst_index,warp_id)<<" index "<<inst_index<<" free "<<warp(warp_id).get_inst_as_free(inst_loc)<<" comp "<<warp(warp_id).get_inst_complete(inst_loc)<<"\n"<<std::flush;
-      // }
 
 #ifndef free_on_oldest
       m_shader->get_pdom_stack_top_info(warp_id, pI, &pc, &rpc);
@@ -5103,11 +5095,17 @@ void shader_core_ctx::warp_inst_complete(const warp_inst_t &inst) {
   int inst_index = m_warp[warp]->get_index_of_loc(inst_loc);
   int sid = inst.get_sid();
 
-  // mark the instruction as complete
-  m_warp[warp]->set_inst_complete(inst_loc);
+  // mark the instruction as complete if we have not already removed it (as it was invalid after issue)
+  if(m_warp[warp]->get_inst_as_free(inst_loc))
+  {
 
-  // if(warp == 3 && sid == 0)
-  //   std::cout<<"COMPLETING_VALS1 idx "<<inst_index<<" loc "<<inst_loc<<" warp "<<warp<<" complete "<<m_warp[warp]->get_inst_complete(inst_loc)<<" pI "<<&inst<<"\n";
+    const warp_inst_t *next_inst1 = m_warp[warp]->ibuffer_next_inst_OOO(inst_loc);
+    uintptr_t address_as_integer = reinterpret_cast<uintptr_t>(next_inst1);
+
+    if(inst.inst_counter == m_warp[warp]->get_instruction_counter(inst_loc))
+      m_warp[warp]->set_inst_complete(inst_loc);
+  }
+
 #endif
 }
 
@@ -5120,25 +5118,19 @@ void shader_core_ctx::mark_insts_as_completed(int warp)
     int check_idx = 0; // this has to be zero as we keep moving indexes up as we remove instructions
     int loc = m_warp[warp]->ibuffer_index_OOO_free_on_oldest(check_idx,warp);
 
-    if(m_warp[warp]->get_inst_complete(loc) && (loc >= 0))
+    // either instruction has completed, or is index 0 and has issued (no longer valid)
+    //if((m_warp[warp]->get_inst_complete(loc)) && (loc >= 0))
+    if((m_warp[warp]->get_inst_complete(loc) || (m_warp[warp]->get_inst_as_free(loc) && !m_warp[warp]->get_inst_valid(loc))) && (loc >= 0))
     {
-      // m_warp[warp]->ibuffer_decrease_all_index_free_on_oldest(i, warp);
-      // m_warp[warp]->ibuffer_decrement_tail_full_OOO();
-      // m_warp[warp]->replay_buffer_decrement_tail_IB_DEB_OOO();
-
       // issue was in-order
       if(m_warp[warp]->get_inst_as_free(loc) == 2)
       {
-        // if(warp == 3 && get_sid() == 0)
-        // std::cout<<"RELASING_VALS1_IN idx "<<i<<" loc "<<loc<<" warp "<<warp<<" complete "<<m_warp[warp]->get_inst_complete(loc)<<"\n";
         m_warp[warp]->ibuffer_decrement_tail_OOO();
         m_warp[warp]->ibuffer_decrease_all_index_free_on_oldest(check_idx, warp);
         m_warp[warp]->ibuffer_decrement_tail_full_OOO();
       }
       else if(m_warp[warp]->get_inst_as_free(loc) == 3)
       {
-        // if(warp == 3 && get_sid() == 0)
-        // std::cout<<"RELASING_VALS1_OOO idx "<<i<<" loc "<<loc<<" warp "<<warp<<" complete "<<m_warp[warp]->get_inst_complete(loc)<<"\n";
         m_warp[warp]->replay_buffer_decrement_tail_IB_DEB_OOO();
         m_warp[warp]->ibuffer_decrease_all_index_free_on_oldest(check_idx, warp);
         m_warp[warp]->ibuffer_decrement_tail_full_OOO();
@@ -5150,6 +5142,7 @@ void shader_core_ctx::mark_insts_as_completed(int warp)
       }
       m_warp[warp]->set_inst_incomplete(loc);
       m_warp[warp]->set_inst_as_free(loc);
+      m_warp[warp]->set_instruction_counter_issued(loc);
     }
     else
     {

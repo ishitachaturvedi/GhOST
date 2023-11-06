@@ -1269,7 +1269,8 @@ class warp_inst_t : public inst_t {
   int get_cycle_issued_warp() const { return warp_issued_cycle; }	
   void set_issued_loc(int idx) { m_inst_number = idx; }
   int get_issued_loc() const { return m_inst_number; }
-  unsigned m_checked_for_dep;	
+  uintptr_t m_checked_for_dep;	
+  int inst_counter;
   unsigned m_stalled_cycles;	
   unsigned m_inst_number;	
   bool m_empty;
