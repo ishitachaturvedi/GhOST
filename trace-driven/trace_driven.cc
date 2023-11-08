@@ -53,6 +53,7 @@
 #include "gpgpusim_entrypoint.h"
 #include "option_parser.h"
 #include "trace_driven.h"
+#include "../definition.h"
 
 const trace_warp_inst_t *trace_shd_warp_t::get_next_trace_inst() {
   if (trace_pc < warp_traces.size()) {
@@ -222,7 +223,9 @@ bool trace_warp_inst_t::parse_from_trace_struct(
 
   branching_inst = (!(bra_check.compare(opcode1))) && active_mask!= 0;
 
+#ifndef branch_prediction
   predicate_inst = (opcode1.find(predicate_set) != std::string::npos);
+#endif
 
   no_stall_control_inst = (opcode1.find(bssy_check) != std::string::npos) || (opcode1.find(bsync_check) != std::string::npos)
                       || (opcode1.find(BMOV_set) != std::string::npos) || (opcode1.find(BREAK_set) != std::string::npos) 

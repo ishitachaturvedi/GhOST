@@ -49,6 +49,7 @@
 #include "stat-tool.h"
 #include "traffic_breakdown.h"
 #include "visualizer.h"
+#include "../../definition.h"
 
 #include <sstream>
 
@@ -59,26 +60,6 @@
 #include "fast.h"	
 #include <iostream>	
 using namespace std;	
-#define IB_OOO_ON	
-//#define DEB_OOO_ON	
-// IB is full OOO	
-//#ifdef IB_OOO_ON	
-
-#define IB_OOO_FULL	
-#define TWO_STAGE_IB
-
-// free the instruction buffer entry only if it is the oldest instruction in the issue buffer and has written back
-//#define free_on_oldest
-
-//#define TLB_on
-
-//#endif	
-//#define HAWS_ON	
-
-//#define RENAME_REGS
-
-#define trace_driven
-//#define prioritizeMEM
 
 typedef enum {	
   mem_data,	
@@ -920,77 +901,6 @@ const active_mask_t &exec_shader_core_ctx::get_active_mask(
   return m_simt_stack[warp_id]->get_active_mask();
 }
 
-#ifdef DEB_OOO_ON
-void shader_core_ctx::decode() {
-
-  int can_fetch2 = 0;
-  // DEOCDE_STREAMING
-  if (m_inst_fetch_buffer.m_valid) {
-    // decode 1 or 2 instructions and place them into ibuffer
-
-    // normal ibuffer
-    address_type pc = m_inst_fetch_buffer.m_pc;
-    const warp_inst_t *pI1 = get_next_inst(m_inst_fetch_buffer.m_warp_id, pc);
-    //m_warp[m_inst_fetch_buffer.m_warp_id]->ibuffer_fill(0, pI1);
-
-    int inst_pos = m_warp[m_inst_fetch_buffer.m_warp_id]->ibuffer_empty_idx_streaming();
-
-    m_warp[m_inst_fetch_buffer.m_warp_id]->last_pc_decoded_streaming = m_warp[m_inst_fetch_buffer.m_warp_id]->last_pc_decoded_streaming + pI1->isize;
-
-    if (pI1) {
-      if(inst_pos!=-1)
-      {
-        m_warp[m_inst_fetch_buffer.m_warp_id]->ibuffer_fill_streaming(inst_pos, pI1);
-        m_warp[m_inst_fetch_buffer.m_warp_id]->inc_inst_in_pipeline();
-        if(pI1->is_ret_exit())
-        {
-          m_warp[m_inst_fetch_buffer.m_warp_id]->warp_inst_retired = 1;
-        }
-        m_warp[m_inst_fetch_buffer.m_warp_id]->set_ibuffer_pushed_streaming(cycles_passed,inst_pos);
-      }
-      can_fetch2 = 1;
-      m_stats->m_num_decoded_insn[m_sid]++;
-      if (pI1->oprnd_type == INT_OP) {
-        m_stats->m_num_INTdecoded_insn[m_sid]++;
-      } else if (pI1->oprnd_type == FP_OP) {
-        m_stats->m_num_FPdecoded_insn[m_sid]++;
-      }
-      const warp_inst_t *pI2 =
-          get_next_inst(m_inst_fetch_buffer.m_warp_id, pc + pI1->isize);
-      if (pI2 && m_warp[m_inst_fetch_buffer.m_warp_id]->ibuffer_has_space_stareaming()) {
-        can_fetch2 = 1;
-        //m_warp[m_inst_fetch_buffer.m_warp_id]->ibuffer_fill(1, pI2);
-
-        inst_pos = m_warp[m_inst_fetch_buffer.m_warp_id]->ibuffer_empty_idx_streaming();
-
-        if(inst_pos!=-1)
-        {
-
-          m_warp[m_inst_fetch_buffer.m_warp_id]->ibuffer_fill_streaming(inst_pos, pI2);
-          m_warp[m_inst_fetch_buffer.m_warp_id]->last_pc_decoded_streaming = m_warp[m_inst_fetch_buffer.m_warp_id]->last_pc_decoded_streaming + pI1->isize;
-          m_warp[m_inst_fetch_buffer.m_warp_id]->inc_inst_in_pipeline();
-          if(pI2->is_ret_exit())
-          {
-            m_warp[m_inst_fetch_buffer.m_warp_id]->warp_inst_retired = 2;
-          }
-          m_warp[m_inst_fetch_buffer.m_warp_id]->set_ibuffer_pushed_streaming(cycles_passed,inst_pos);
-
-          m_stats->m_num_decoded_insn[m_sid]++;
-          if (pI2->oprnd_type == INT_OP) {
-            m_stats->m_num_INTdecoded_insn[m_sid]++;
-          } else if (pI2->oprnd_type == FP_OP) {
-            m_stats->m_num_FPdecoded_insn[m_sid]++;
-        }
-        }
-
-      }
-    }
-
-    m_inst_fetch_buffer.m_valid = false;
-  }
-}
-#endif
-
 void shader_core_ctx::PutInstInIB2(int warp_id)
 {
 #ifdef TWO_STAGE_IB
@@ -1093,6 +1003,7 @@ void shader_core_ctx::PutInstInIB2(int warp_id)
 // OOO IBUFFER
 void shader_core_ctx::decode() {
   int tail, num_stores, mem_count, nonMemSync, tail_full_OOO, inst_counter, predicate_inst;
+  long long inst_number;
 #ifndef TWO_STAGE_IB
   int can_fetch2 = 0;
   // DEOCDE_STREAMING
@@ -1131,7 +1042,8 @@ void shader_core_ctx::decode() {
         mem_count = m_warp[m_inst_fetch_buffer.m_warp_id]->ibuffer_get_memory_count();
         nonMemSync = m_warp[m_inst_fetch_buffer.m_warp_id]->ibuffer_get_control_inst_OOO();
         predicate_inst = m_warp[m_inst_fetch_buffer.m_warp_id]->ibuffer_get_predicate_inst_OOO();
-        m_warp[m_inst_fetch_buffer.m_warp_id]->ibuffer_fill_OOO(inst_pos,pI1,pc,tail,tail_full_OOO,num_stores,m_inst_fetch_buffer.m_warp_id,mem_count,nonMemSync,cycles_passed,predicate_inst);
+        inst_number = m_warp[m_inst_fetch_buffer.m_warp_id]->get_inst_counter();
+        m_warp[m_inst_fetch_buffer.m_warp_id]->ibuffer_fill_OOO(inst_pos,pI1,pc,tail,tail_full_OOO,num_stores,m_inst_fetch_buffer.m_warp_id,mem_count,nonMemSync,cycles_passed,predicate_inst,inst_number);
         m_warp[m_inst_fetch_buffer.m_warp_id]->inc_inst_in_pipeline();
 
         // increase tail
@@ -1197,7 +1109,8 @@ void shader_core_ctx::decode() {
           mem_count = m_warp[m_inst_fetch_buffer.m_warp_id]->ibuffer_get_memory_count();
           nonMemSync = m_warp[m_inst_fetch_buffer.m_warp_id]->ibuffer_get_control_inst_OOO();
           predicate_inst = m_warp[m_inst_fetch_buffer.m_warp_id]->ibuffer_get_predicate_inst_OOO();
-          m_warp[m_inst_fetch_buffer.m_warp_id]->ibuffer_fill_OOO(inst_pos,pI2,pc + pI1->isize,tail,tail_full_OOO,num_stores,m_inst_fetch_buffer.m_warp_id,mem_count,nonMemSync,cycles_passed,predicate_inst);
+          inst_number = m_warp[m_inst_fetch_buffer.m_warp_id]->get_inst_counter();
+          m_warp[m_inst_fetch_buffer.m_warp_id]->ibuffer_fill_OOO(inst_pos,pI2,pc + pI1->isize,tail,tail_full_OOO,num_stores,m_inst_fetch_buffer.m_warp_id,mem_count,nonMemSync,cycles_passed,predicate_inst,inst_number);
           //m_warp[m_inst_fetch_buffer.m_warp_id]->last_pc_decoded_streaming = m_warp[m_inst_fetch_buffer.m_warp_id]->last_pc_decoded_streaming + pI1->isize;
           
           m_warp[m_inst_fetch_buffer.m_warp_id]->last_pc_decoded_streaming = pI2->pc + pI1->isize;
@@ -1269,7 +1182,8 @@ void shader_core_ctx::decode() {
             mem_count = m_warp[m_inst_fetch_buffer.m_warp_id]->ibuffer_get_memory_count();
             nonMemSync = m_warp[m_inst_fetch_buffer.m_warp_id]->ibuffer_get_control_inst_OOO();
             predicate_inst = m_warp[m_inst_fetch_buffer.m_warp_id]->ibuffer_get_predicate_inst_OOO();
-            m_warp[m_inst_fetch_buffer.m_warp_id]->ibuffer_fill_OOO(inst_pos,pI2,pc + i * pI1->isize,tail,tail_full_OOO,num_stores,m_inst_fetch_buffer.m_warp_id,mem_count,nonMemSync,cycles_passed,predicate_inst);
+            inst_number = m_warp[m_inst_fetch_buffer.m_warp_id]->get_inst_counter();
+            m_warp[m_inst_fetch_buffer.m_warp_id]->ibuffer_fill_OOO(inst_pos,pI2,pc + i * pI1->isize,tail,tail_full_OOO,num_stores,m_inst_fetch_buffer.m_warp_id,mem_count,nonMemSync,cycles_passed,predicate_inst,inst_number);
             //m_warp[m_inst_fetch_buffer.m_warp_id]->last_pc_decoded_streaming = m_warp[m_inst_fetch_buffer.m_warp_id]->last_pc_decoded_streaming + pI1->isize;
             m_warp[m_inst_fetch_buffer.m_warp_id]->last_pc_decoded_streaming = pI2-> pc + pI1->isize;
             m_warp[m_inst_fetch_buffer.m_warp_id]->inc_inst_in_pipeline();
@@ -1408,138 +1322,6 @@ void shader_core_ctx::decode() {
     m_inst_fetch_buffer.m_valid = false;
   }
 #endif
-}
-#endif
-
-#ifdef DEB_OOO_ON
-void shader_core_ctx::fetch() {
-  if (!m_inst_fetch_buffer.m_valid) {
-    if (m_L1I->access_ready()) {
-      mem_fetch *mf = m_L1I->next_access();
-      m_warp[mf->get_wid()]->clear_imiss_pending();
-
-      // m_inst_fetch_buffer =
-      //     ifetch_buffer_t(m_warp[mf->get_wid()]->get_pc(),
-      //                     mf->get_access_size(), mf->get_wid());
-      // assert(m_warp[mf->get_wid()]->get_pc() ==
-      //        (mf->get_addr() -
-      //         PROGRAM_MEM_START));  // Verify that we got the instruction we
-      //                             //  were expecting.
-
-      if(m_warp[mf->get_wid()]->last_pc_decoded_streaming == mf->get_pc_fetch())
-      {
-        m_inst_fetch_buffer =
-        ifetch_buffer_t(m_warp[mf->get_wid()]->last_pc_decoded_streaming,
-        mf->get_access_size(), mf->get_wid());
-        assert(m_warp[mf->get_wid()]->last_pc_decoded_streaming ==
-             (mf->get_addr() -
-              PROGRAM_MEM_START));
-      }
-
-      m_warp[mf->get_wid()]->set_last_fetch(m_gpu->gpu_sim_cycle);
-      delete mf;
-    } else {
-      // find an active warp with space in instruction buffer that is not
-      // already waiting on a cache miss and get next 1-2 instructions from
-      // i-cache...
-      for (unsigned i = 0; i < m_config->max_warps_per_shader; i++) {
-        unsigned warp_id =
-            (m_last_warp_fetched + 1 + i) % m_config->max_warps_per_shader;
-        // this code checks if this warp has finished executing and can be
-        // reclaimed
-
-        if (m_warp[warp_id]->hardware_done() &&
-            !m_scoreboard->pendingWrites(warp_id, m_config->pending_write_ignore) &&
-            !m_warp[warp_id]->done_exit() && !(m_config->gpgpu_reply_buffer && !m_warp[m_inst_fetch_buffer.m_warp_id]->replay_buffer_empty())) {
-          bool did_exit = false;
-          for (unsigned t = 0; t < m_config->warp_size; t++) {
-            unsigned tid = warp_id * m_config->warp_size + t;
-            if (m_threadState[tid].m_active == true) {
-              m_threadState[tid].m_active = false;
-              unsigned cta_id = m_warp[warp_id]->get_cta_id();
-              if (m_thread[tid] == NULL) {
-                register_cta_thread_exit(cta_id, m_kernel);
-              } else {
-                register_cta_thread_exit(cta_id,
-                                         &(m_thread[tid]->get_kernel()));
-              }
-              m_not_completed -= 1;
-              m_active_threads.reset(tid);
-              did_exit = true;
-            }
-          }
-          if (did_exit) m_warp[warp_id]->set_done_exit();
-          --m_active_warps;
-          assert(m_active_warps >= 0);
-        }
-
-        // this code fetches instructions from the i-cache or generates memory
-
-        // normal ibuffer
-        if (!m_warp[warp_id]->functional_done() &&
-            !m_warp[warp_id]->imiss_pending() &&
-            m_warp[warp_id]->ibuffer_empty())
-
-          // if (!m_warp[warp_id]->functional_done() &&
-          //   !m_warp[warp_id]->imiss_pending() &&
-          //   m_warp[warp_id]->ibuffer_empty_streaming())  // STREAMING_TEST
-
-        //streaming ibuffer
-        // if (!m_warp[warp_id]->functional_done() &&
-        //     !m_warp[warp_id]->imiss_pending() &&
-        //     ((!m_warp[warp_id]->warp_inst_retired && m_warp[warp_id]->ibuffer_has_space_stareaming()) || (m_warp[warp_id]->warp_inst_retired && m_warp[warp_id]->ibuffer_empty_streaming())))
-
-        {
-          address_type pc;
-          //pc = m_warp[warp_id]->get_pc();
-          pc = m_warp[warp_id]->last_pc_decoded_streaming;
-          address_type ppc = pc + PROGRAM_MEM_START;
-          // Ishita - increase nbytes to double for larger IB. Otherwise no point.
-          unsigned nbytes = 16;
-          //unsigned nbytes = m_warp[warp_id]->get_ibuffer_size() * 8; // get instructions equal to IB size
-          unsigned offset_in_block =
-              pc & (m_config->m_L1I_config.get_line_sz() - 1);
-          if ((offset_in_block + nbytes) > m_config->m_L1I_config.get_line_sz())
-            nbytes = (m_config->m_L1I_config.get_line_sz() - offset_in_block);
-
-          // TODO: replace with use of allocator
-          // mem_fetch *mf = m_mem_fetch_allocator->alloc()
-          mem_access_t acc(INST_ACC_R, ppc, nbytes, false, m_gpu->gpgpu_ctx);
-          mem_fetch *mf = new mem_fetch(
-              acc, NULL /*we don't have an instruction yet*/, READ_PACKET_SIZE,
-              warp_id, m_sid, m_tpc, m_memory_config,
-              m_gpu->gpu_tot_sim_cycle + m_gpu->gpu_sim_cycle);
-          mf->set_pc_fetch(pc);
-          std::list<cache_event> events;
-          enum cache_request_status status;
-          if (m_config->perfect_inst_const_cache)
-            status = HIT;
-          else
-            status = m_L1I->access(
-                (new_addr_type)ppc, mf,
-                m_gpu->gpu_sim_cycle + m_gpu->gpu_tot_sim_cycle, events);
-
-          if (status == MISS) {
-            m_last_warp_fetched = warp_id;
-            m_warp[warp_id]->set_imiss_pending();
-            m_warp[warp_id]->set_last_fetch(m_gpu->gpu_sim_cycle);
-          } else if (status == HIT) {
-            m_last_warp_fetched = warp_id;
-            m_inst_fetch_buffer = ifetch_buffer_t(pc, nbytes, warp_id);
-            m_warp[warp_id]->set_last_fetch(m_gpu->gpu_sim_cycle);
-            delete mf;
-          } else {
-            m_last_warp_fetched = warp_id;
-            assert(status == RESERVATION_FAIL);
-            delete mf;
-          }
-          break;
-        }
-      }
-    }
-  }
-
-  m_L1I->cycle();
 }
 #endif
 
@@ -1823,9 +1605,6 @@ void shader_core_ctx::issue_warp_ibuffer_OOO_in_order(register_set &pipe_reg_set
       pipe_reg_set.get_free(m_config->sub_core_model, sch_id);
   int reg_id = pipe_reg_set.get_free_id(m_config->sub_core_model, sch_id);
 
-  // if(warp_id == 0 && m_cluster_id == 0 && m_sid == 0)
-  //   std::cout<<"Issue_inorder_strict "<< std::hex <<next_inst->pc<<" "<< std::dec <<next_inst->op<<" "<<warp_id<<" "<<index_num<<"\n";
-
   assert(pipe_reg);
 
 #ifdef TLB_on
@@ -1880,7 +1659,6 @@ void shader_core_ctx::issue_warp_ibuffer_OOO_in_order(register_set &pipe_reg_set
   // uintptr_t address_as_integer = reinterpret_cast<uintptr_t>(next_inst1);
   // (*pipe_reg)->m_checked_for_dep = address_as_integer;
   (*pipe_reg)->inst_counter = m_warp[warp_id]->get_instruction_counter(index_loc);
-  //std::cout<<"COMPARE_VAL2 "<<(*pipe_reg)->m_checked_for_dep<<" "<<address_as_integer<<" "<<reinterpret_cast<uintptr_t>(next_inst1)<<" "<<next_inst1<<"\n";
   (*pipe_reg)->set_cluster_id(m_cluster_id);
   (*pipe_reg)->set_cycle_issued(cycles_passed);
   (*pipe_reg)->set_issued_loc(index_loc);
@@ -1961,9 +1739,9 @@ void shader_core_ctx::issue_warp_ibuffer_OOO_in_order(register_set &pipe_reg_set
 #ifndef free_on_oldest
   m_warp[warp_id]->ibuffer_decrease_all_index_OOO(index_num, warp_id);
 #endif
+#endif
 #ifndef IB_OOO_FULL
   m_warp[warp_id]->ibuffer_decrease_all_index_IB_IN_OOO(index_num, warp_id);
-#endif
 #endif
 
   m_warp[warp_id]->set_next_pc(next_inst->pc + next_inst->isize);
@@ -2028,7 +1806,6 @@ void shader_core_ctx::issue_warp_push_from_replay_DEB_IB_OOO(register_set &pipe_
   // uintptr_t address_as_integer = reinterpret_cast<uintptr_t>(next_inst1);
   // (*pipe_reg)->m_checked_for_dep = address_as_integer;
   (*pipe_reg)->inst_counter = m_warp[warp_id]->get_instruction_counter(index_loc);
-  //std::cout<<"COMPARE_VAL1 "<<(*pipe_reg)->m_checked_for_dep<<" "<<address_as_integer<<" "<<reinterpret_cast<uintptr_t>(next_inst1)<<" "<<next_inst1<<"\n";
   (*pipe_reg)->set_wid(warp_id);
   (*pipe_reg)->set_cluster_id(m_cluster_id);
   (*pipe_reg)->set_cycle_issued(cycles_passed);
@@ -2125,9 +1902,9 @@ void shader_core_ctx::issue_warp_push_from_replay_DEB_IB_OOO(register_set &pipe_
 #ifdef IB_OOO_FULL
   m_warp[warp_id]->ibuffer_decrease_all_index_OOO(index_num, warp_id);
 #endif
+#endif
 #ifndef IB_OOO_FULL 
   m_warp[warp_id]->ibuffer_decrease_all_index_IB_DEB_OOO(index_num, warp_id);
-#endif
 #endif
 
   // decrease full OOO tail
@@ -2201,9 +1978,9 @@ void shader_core_ctx::issue_warp_push_in_DEB_IB_OOO(const warp_inst_t *next_inst
   m_warp[warp_id]->ibuffer_fill_OOO_replay(id,tail,inst_loc);
 
 #ifndef free_on_oldest
-  m_warp[warp_id]->ibuffer_free_OOO(index_loc);
+  m_warp[warp_id]->ibuffer_free_OOO(inst_loc);
 #else
-  m_warp[warp_id]->ibuffer_free_OOO_free_on_oldest(index_loc);
+  m_warp[warp_id]->ibuffer_free_OOO_free_on_oldest(inst_loc);
 #endif
 
   //m_warp[warp_id]->set_active_mask(active_mask,id);
@@ -3093,9 +2870,6 @@ for (std::vector<shd_warp_t *>::const_iterator iter =
             warp(warp_id).set_ibuffer_inst_number(inst_loc);
             warp(warp_id).ibuffer_increment_inst_number_OOO();
           }
-
-          //std::cout<<"INST_HERE2 "<<warp_id<<" "<<pI<<" "<<inst_loc<<" "<<inst_index<<"\n";
-
           valid_inst = true;
         
           bool bypass_mem = false;
@@ -3437,7 +3211,6 @@ for (std::vector<shd_warp_t *>::const_iterator iter =
                                            m_id);
 
                 if (spec_pipe_avail) {
-                  //std::cout<<"IN_ORDER_HERE_SPEC "<<warp_id<<" "<<pI->pc<<" "<<cycles_passed<<"\n";
                   cycles_spent_in_ib = cycles_passed - warp(warp_id).get_ibuffer_pushed_OOO_all(inst_loc);
                   //std::cout<<"VALUE_REORDERING "<<pc_used<<" 0 "<<warp_id<<" "<<m_shader->get_kernel()->get_name()<<" 0 "<<warp(warp_id).ibuffer_DEB_bit(inst_loc)<<" "<<(cycles_passed-warp(warp_id).get_ibuffer_pushed_OOO_all(inst_loc))<<" "<<cycles_passed<<"0 \n"<<std::flush;
                   m_shader->issue_warp_ibuffer_OOO_in_order(*spec_reg_set, pI, active_mask, warp_id,
@@ -4555,15 +4328,6 @@ while (g
                 if (tensor_core_pipe_avail) {
                   cycles_spent_in_ib = cycles_passed - warp(warp_id).get_ibuffer_pushed_OOO_all(inst_loc);
 
-                  // if(replay_index!=0)
-                  // {
-                  //   std::cout<<"ISSUING_OOO_HERE_TENSOR "<<warp_id<<" "<<pI->pc<<" "<<cycles_passed<<"\n";
-                  // }
-                  // else
-                  // {
-                  //   std::cout<<"IN_ORDER_HERE_TENSOR "<<warp_id<<" "<<pI->pc<<" "<<cycles_passed<<"\n";
-                  // }
-                  
                   int reorder_dist = warp(warp_id).ibuffer_distance(inst_loc) - replay_index;
                   //std::cout<<"VALUE_REORDERING "<<pc_used<<" "<<reorder_dist<<" "<<warp_id<<" "<<m_shader->get_kernel()->get_name()<<" 0 "<<warp(warp_id).ibuffer_DEB_bit(inst_loc)<<" "<<(cycles_passed-warp(warp_id).get_ibuffer_pushed_OOO_all(inst_loc))<<" "<<cycles_passed<<" "<<replay_index<<"\n"<<std::flush;
                   //std::cout<<"VALUE_REORDERING7 "<<pc_used<<" "<<reorder_dist<<" "<<warp_id<<" 0 "<<warp(warp_id).ibuffer_DEB_bit(inst_loc)<<" "<<(cycles_passed-warp(warp_id).get_ibuffer_pushed_OOO_all(inst_loc))<<" "<<m_shader->m_gpu->gpu_sim_cycle<<"\n"<<std::flush;
@@ -4596,16 +4360,6 @@ while (g
 
                 if (spec_pipe_avail) {
                   cycles_spent_in_ib = cycles_passed - warp(warp_id).get_ibuffer_pushed_OOO_all(inst_loc);
-                  
-
-                  // if(replay_index!=0)
-                  // {
-                  //   std::cout<<"ISSUING_OOO_HERE_SPEC "<<warp_id<<" "<<pI->pc<<" "<<cycles_passed<<"\n";
-                  // }
-                  // else
-                  // {
-                  //   std::cout<<"IN_ORDER_HERE_SPEC "<<warp_id<<" "<<pI->pc<<" "<<cycles_passed<<"\n";
-                  // }
 
                   int reorder_dist = warp(warp_id).ibuffer_distance(inst_loc) - replay_index;
                   //std::cout<<"VALUE_REORDERING "<<pc_used<<" "<<reorder_dist<<" "<<warp_id<<" "<<m_shader->get_kernel()->get_name()<<" 0 "<<warp(warp_id).ibuffer_DEB_bit(inst_loc)<<" "<<(cycles_passed-warp(warp_id).get_ibuffer_pushed_OOO_all(inst_loc))<<" "<<cycles_passed<<" "<<replay_index<<"\n"<<std::flush;
@@ -5000,8 +4754,6 @@ void shader_core_ctx::execute() {
 
     if (issue_inst.has_ready(partition_issue, reg_id) &&
         m_fu[n]->can_issue(**ready_reg)) {
-      // if(issue_port == OC_EX_INT)
-      //   std::cout<<"VALS "<<(*ready_reg)->get_wid()<<" "<<(*ready_reg)->get_pc()<<" ";
       bool schedule_wb_now = !m_fu[n]->stallable();
       int resbus = -1;
       if (schedule_wb_now &&
@@ -5009,22 +4761,12 @@ void shader_core_ctx::execute() {
         assert((*ready_reg)->latency < MAX_ALU_LATENCY);
         m_result_bus[resbus]->set((*ready_reg)->latency);
         m_fu[n]->issue(issue_inst);
-        // if(issue_port == OC_EX_INT)
-        // {
-        //   std::cout<<"ISSUED_INST1";
-        // }
       } else if (!schedule_wb_now) {
         m_fu[n]->issue(issue_inst);
-        // if(issue_port == OC_EX_INT)
-        //   std::cout<<"ISSUED_INST2";
       } else {
         // stall issue (cannot reserve result bus)
-        // if(issue_port == OC_EX_INT)
-        //   std::cout<<"COULD_NOT_ISSUE";
       }
     }
-    // if(issue_port == OC_EX_INT)
-    //   std::cout<<"\n";
   }
 }
 
@@ -5311,10 +5053,7 @@ mem_stage_stall_type ldst_unit::process_memory_access_queue_l1cache(
 #ifdef TLB_on
         if(inst.is_load())
         {
-          //std::cout<<"INTO_l1 "<<inst.get_wid()<<" "<<m_core->get_stalled_on_TLB(inst.get_wid())<<" ";
           m_core->set_stalled_on_TLB(inst.get_wid(),0);
-          //std::cout<<m_core->get_stalled_on_TLB(inst.get_wid())<<"\n";
-          //m_core->m_warp[inst.get_wid()]->set_last_fetch(m_core->get_gpu()->gpu_sim_cycle)
         }
 #endif
       } else {
@@ -7527,11 +7266,6 @@ void opndcoll_rfu_t::allocate_cu(unsigned port_num) {
           // Sub core model only allocates on the subset of CUs assigned to the
           // scheduler that issued
           unsigned reg_id = (*inp.m_in[i]).get_ready_reg_id();
-          // if((*(*inp.m_in[i]).get_ready(sub_core_model,reg_id))->op==ALU_OP)
-          // {
-          //   std::cout<<"INT_OC "<<(*(*inp.m_in[i]).get_ready(sub_core_model,reg_id))->op<<"\n";
-          //   TRYING_TO_ALLOCATE = 1;
-          // }
           schd_id = (*inp.m_in[i]).get_schd_id(reg_id);
           assert(cu_set.size() % m_num_warp_scheds == 0 &&
                  cu_set.size() >= m_num_warp_scheds);
@@ -7553,10 +7287,6 @@ void opndcoll_rfu_t::allocate_cu(unsigned port_num) {
       // break;  // can only service a single input, if it failed it will fail
       // for
       // others.
-      // if(TRYING_TO_ALLOCATE)
-      // {
-      //   std::cout<<"COULS_NOT_ALLOCATE_NO_CU\n";
-      // }
     }
   }
 }
