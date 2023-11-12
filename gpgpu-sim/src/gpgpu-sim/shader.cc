@@ -2641,8 +2641,6 @@ for (std::vector<shd_warp_t *>::const_iterator iter =
                                                  // units (as in Maxwell and
                                                  // Pascal)
 
-    //if (warp(warp_id).ibuffer_empty())
-
 #ifdef TWO_STAGE_IB
     m_shader->PutInstInIB2(warp_id);
 #endif
@@ -3856,6 +3854,9 @@ int scheduler_unit::replay_ib_inst(int m_cluster_id, int sched_num, int &warp_id
 
     //index of head instruciton is 0, then 1, then 2 and so on. The DEB has (inst, index, pc)
     // Instructions are fetched using the index value
+
+  // 
+  
 
   if(warp(warp_id).waiting())
     waiting_warp = 1;
@@ -5294,6 +5295,7 @@ bool ldst_unit::texture_cycle(warp_inst_t &inst, mem_stage_stall_type &rc_fail,
   if (inst.empty() || inst.space.get_type() != tex_space) return true;
   if (inst.active_count() == 0) return true;
   mem_stage_stall_type fail = process_memory_access_queue(m_L1T, inst);
+
   if (fail != NO_RC_FAIL) {
     rc_fail = fail;  // keep other fails if this didn't fail.
     fail_type = T_MEM;
@@ -5308,6 +5310,7 @@ bool ldst_unit::memory_cycle(warp_inst_t &inst,
                        (inst.space.get_type() != local_space) &&
                        (inst.space.get_type() != param_space_local)))
     return true;
+
   if (inst.active_count() == 0) return true;
   if (inst.accessq_empty()) return true;
 
@@ -5940,6 +5943,16 @@ void ldst_unit::cycle() {
   warp_inst_t &pipe_reg = *m_dispatch_reg;
   enum mem_stage_stall_type rc_fail = NO_RC_FAIL;
   mem_stage_access_type type;
+
+  if(pipe_reg.checkedAtTLB == 0 && pipe_reg.op == LOAD_OP && (pipe_reg.active_count() == 0 || pipe_reg
+  .accessq_empty()))
+  {
+    m_core->reduceLoadsToTLB(pipe_reg.get_wid());
+    pipe_reg
+    .checkedAtTLB = 1;
+    m_core->reducePriorLoads(pipe_reg.get_wid());
+  }
+
   bool done = true;
   done &= shared_cycle(pipe_reg, rc_fail, type);
   done &= constant_cycle(pipe_reg, rc_fail, type);
