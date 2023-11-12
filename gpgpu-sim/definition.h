@@ -8,11 +8,13 @@
 
 //#define RENAME_REGS
 
-// free the instruction buffer entry only if it is the oldest instruction in the issue buffer and has written back
-//#define free_on_oldest
-
 // branch prediction
 //#define branch_prediction
+
+//#define GhOSTPrecise
+
+// free the instruction buffer entry only if it is the oldest instruction in the issue buffer and has written back
+//#define free_on_oldest
 
 //#define TLB_on
 
@@ -20,3 +22,4 @@
 //#define HAWS_ON	
 
 //#define prioritizeMEM
+
