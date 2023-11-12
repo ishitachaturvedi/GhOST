@@ -906,6 +906,8 @@ void shader_core_ctx::PutInstInIB2(int warp_id)
 #ifdef TWO_STAGE_IB
   int tail, num_stores, mem_count, nonMemSync, tail_full_OOO, inst_counter, predicate_inst;
   long long inst_number;
+  int isNonIdempotent = 0;
+  int loadInsns = 0;
   // put instructions in IB2 if it has space
   int IB1_index = 0;
 
@@ -946,6 +948,10 @@ void shader_core_ctx::PutInstInIB2(int warp_id)
     #ifdef trace_driven
       int pc = pI->pc;
     #endif
+
+#ifdef GhOSTPrecise
+      isNonIdempotent = m_scoreboard->checkIsIdempotent(warp_id, pI) && !(pI->op == LOAD_OP);
+#endif
       // add values and get stats
       tail = m_warp[warp_id]->ibuffer_get_tail_full_OOO();
       tail_full_OOO = m_warp[warp_id]->ibuffer_get_tail_full_OOO();
@@ -954,11 +960,18 @@ void shader_core_ctx::PutInstInIB2(int warp_id)
       nonMemSync = m_warp[warp_id]->ibuffer_get_control_inst_OOO();
       predicate_inst = m_warp[warp_id]->ibuffer_get_predicate_inst_OOO();
       inst_number = m_warp[warp_id]->get_inst_counter();
-      m_warp[warp_id]->ibuffer_fill_OOO(pos,pI,pc,tail,tail_full_OOO,num_stores,warp_id,mem_count,nonMemSync,cycles_passed,predicate_inst,inst_number);
+#ifdef GhOSTPrecise
+      loadInsns = m_warp[warp_id]->getLoadToTLB();
+#endif
+      m_warp[warp_id]->ibuffer_fill_OOO(pos,pI,pc,tail,tail_full_OOO,num_stores,warp_id,mem_count,nonMemSync,cycles_passed,predicate_inst,inst_number,isNonIdempotent,loadInsns);
       m_warp[warp_id]->inc_inst_in_pipeline();
       // increase tail
       m_warp[warp_id]->ibuffer_increment_tail_OOO();
       m_warp[warp_id]->ibuffer_increment_tail_full_OOO();
+
+#ifdef GhOSTPrecise
+    m_scoreboard->addWriteRegs(pI, warp_id);
+#endif
 
       // increase num_stores
       if(pI->op==STORE_OP || pI->op==TENSOR_CORE_STORE_OP)
@@ -969,7 +982,11 @@ void shader_core_ctx::PutInstInIB2(int warp_id)
 #ifdef TLB_on
       if(pI->op==LOAD_OP || pI->op==STORE_OP)
 #else
+#ifdef GhOSTPrecise
+      if(pI->op==STORE_OP || pI->op==LOAD_OP)
+#else
       if(pI->op==STORE_OP)
+#endif
 #endif
         m_warp[warp_id]->ibuffer_increase_memory_count();
 
@@ -978,10 +995,18 @@ void shader_core_ctx::PutInstInIB2(int warp_id)
         m_warp[warp_id]->ibuffer_increment_control_inst();
       }
 
-      if(pI->predicate_inst == 1)
+       if(pI->predicate_inst == 1)
       {
         m_warp[warp_id]->ibuffer_increment_predicate_inst();
       }
+//#endif
+
+#ifdef GhOSTPrecise
+  if(pI->op==LOAD_OP)
+  {
+    m_warp[warp_id]->increaseLoadToTLB();
+  }
+#endif
 
       m_warp[warp_id]->get_ibuffer_1_set_inst_invalid(IB1_index);
       m_stats->m_num_decoded_insn[m_sid]++;
@@ -1004,6 +1029,7 @@ void shader_core_ctx::PutInstInIB2(int warp_id)
 void shader_core_ctx::decode() {
   int tail, num_stores, mem_count, nonMemSync, tail_full_OOO, inst_counter, predicate_inst;
   long long inst_number;
+  int isNonIdempotent = 0;
 #ifndef TWO_STAGE_IB
   int can_fetch2 = 0;
   // DEOCDE_STREAMING
@@ -1043,7 +1069,7 @@ void shader_core_ctx::decode() {
         nonMemSync = m_warp[m_inst_fetch_buffer.m_warp_id]->ibuffer_get_control_inst_OOO();
         predicate_inst = m_warp[m_inst_fetch_buffer.m_warp_id]->ibuffer_get_predicate_inst_OOO();
         inst_number = m_warp[m_inst_fetch_buffer.m_warp_id]->get_inst_counter();
-        m_warp[m_inst_fetch_buffer.m_warp_id]->ibuffer_fill_OOO(inst_pos,pI1,pc,tail,tail_full_OOO,num_stores,m_inst_fetch_buffer.m_warp_id,mem_count,nonMemSync,cycles_passed,predicate_inst,inst_number);
+        m_warp[m_inst_fetch_buffer.m_warp_id]->ibuffer_fill_OOO(inst_pos,pI1,pc,tail,tail_full_OOO,num_stores,m_inst_fetch_buffer.m_warp_id,mem_count,nonMemSync,cycles_passed,predicate_inst,inst_number,isNonIdempotent,0);
         m_warp[m_inst_fetch_buffer.m_warp_id]->inc_inst_in_pipeline();
 
         // increase tail
@@ -1110,7 +1136,7 @@ void shader_core_ctx::decode() {
           nonMemSync = m_warp[m_inst_fetch_buffer.m_warp_id]->ibuffer_get_control_inst_OOO();
           predicate_inst = m_warp[m_inst_fetch_buffer.m_warp_id]->ibuffer_get_predicate_inst_OOO();
           inst_number = m_warp[m_inst_fetch_buffer.m_warp_id]->get_inst_counter();
-          m_warp[m_inst_fetch_buffer.m_warp_id]->ibuffer_fill_OOO(inst_pos,pI2,pc + pI1->isize,tail,tail_full_OOO,num_stores,m_inst_fetch_buffer.m_warp_id,mem_count,nonMemSync,cycles_passed,predicate_inst,inst_number);
+          m_warp[m_inst_fetch_buffer.m_warp_id]->ibuffer_fill_OOO(inst_pos,pI2,pc + pI1->isize,tail,tail_full_OOO,num_stores,m_inst_fetch_buffer.m_warp_id,mem_count,nonMemSync,cycles_passed,predicate_inst,inst_number,isNonIdempotent,0);
           //m_warp[m_inst_fetch_buffer.m_warp_id]->last_pc_decoded_streaming = m_warp[m_inst_fetch_buffer.m_warp_id]->last_pc_decoded_streaming + pI1->isize;
           
           m_warp[m_inst_fetch_buffer.m_warp_id]->last_pc_decoded_streaming = pI2->pc + pI1->isize;
@@ -1183,7 +1209,7 @@ void shader_core_ctx::decode() {
             nonMemSync = m_warp[m_inst_fetch_buffer.m_warp_id]->ibuffer_get_control_inst_OOO();
             predicate_inst = m_warp[m_inst_fetch_buffer.m_warp_id]->ibuffer_get_predicate_inst_OOO();
             inst_number = m_warp[m_inst_fetch_buffer.m_warp_id]->get_inst_counter();
-            m_warp[m_inst_fetch_buffer.m_warp_id]->ibuffer_fill_OOO(inst_pos,pI2,pc + i * pI1->isize,tail,tail_full_OOO,num_stores,m_inst_fetch_buffer.m_warp_id,mem_count,nonMemSync,cycles_passed,predicate_inst,inst_number);
+            m_warp[m_inst_fetch_buffer.m_warp_id]->ibuffer_fill_OOO(inst_pos,pI2,pc + i * pI1->isize,tail,tail_full_OOO,num_stores,m_inst_fetch_buffer.m_warp_id,mem_count,nonMemSync,cycles_passed,predicate_inst,inst_number,isNonIdempotent,0);
             //m_warp[m_inst_fetch_buffer.m_warp_id]->last_pc_decoded_streaming = m_warp[m_inst_fetch_buffer.m_warp_id]->last_pc_decoded_streaming + pI1->isize;
             m_warp[m_inst_fetch_buffer.m_warp_id]->last_pc_decoded_streaming = pI2-> pc + pI1->isize;
             m_warp[m_inst_fetch_buffer.m_warp_id]->inc_inst_in_pipeline();
@@ -1651,6 +1677,13 @@ void shader_core_ctx::issue_warp_ibuffer_OOO_in_order(register_set &pipe_reg_set
   m_warp[warp_id]->ibuffer_free_OOO_free_on_oldest(index_loc);
 #endif
 
+#ifdef GhOSTPrecise
+  if(((next_inst->op == BRANCH_OP || next_inst->op == BARRIER_OP || next_inst->op == RET_OPS || next_inst->op == EXIT_OPS|| (next_inst->op == SPECIALIZED_UNIT_1_OP) || next_inst->branching_inst) && !next_inst->no_stall_control_inst))
+  {
+    m_scoreboard->releaseAllBBRegs(warp_id);
+  }
+#endif
+
   assert(next_inst->valid());
   **pipe_reg = *next_inst;  // static instruction information
   (*pipe_reg)->set_sid(sid);
@@ -1723,7 +1756,11 @@ void shader_core_ctx::issue_warp_ibuffer_OOO_in_order(register_set &pipe_reg_set
 #ifdef TLB_on
   if(next_inst->op==LOAD_OP || next_inst->op==TENSOR_CORE_LOAD_OP || next_inst->op==TENSOR_CORE_STORE_OP || next_inst->op==STORE_OP)
 #else
+#ifdef GhOSTPrecise
+  if(next_inst->op==LOAD_OP || next_inst->op==STORE_OP)
+#else
   if(next_inst->op==STORE_OP)
+#endif
 #endif
   {
     m_warp[warp_id]->ibuffer_decrease_memory_count();
@@ -1795,6 +1832,13 @@ void shader_core_ctx::issue_warp_push_from_replay_DEB_IB_OOO(register_set &pipe_
   m_warp[warp_id]->ibuffer_free_OOO(index_loc);
 #else
   m_warp[warp_id]->ibuffer_free_OOO_free_on_oldest(index_loc);
+#endif
+
+#ifdef GhOSTPrecise
+  if(((next_inst->op == BRANCH_OP || next_inst->op == BARRIER_OP || next_inst->op == RET_OPS || next_inst->op == EXIT_OPS|| next_inst->isatomic()|| (next_inst->op == SPECIALIZED_UNIT_1_OP) || next_inst->branching_inst)  && !next_inst->no_stall_control_inst))
+  {
+    m_scoreboard->releaseAllBBRegs(warp_id);
+  }
 #endif
 
   // increase the location of the head
@@ -1885,7 +1929,11 @@ void shader_core_ctx::issue_warp_push_from_replay_DEB_IB_OOO(register_set &pipe_
 #ifdef TLB_on
   if(next_inst->op==LOAD_OP || next_inst->op==TENSOR_CORE_LOAD_OP || next_inst->op==TENSOR_CORE_STORE_OP || next_inst->op==STORE_OP)
 #else
+#ifdef GhOSTPrecise
+  if(next_inst->op==LOAD_OP || next_inst->op==STORE_OP)
+#else
   if(next_inst->op==STORE_OP)
+#endif
 #endif
   {
     m_warp[warp_id]->ibuffer_decrease_memory_count();
@@ -2542,7 +2590,6 @@ void scheduler_unit::cycle_ibuffer_OOO(int m_cluster_id, int sched_num) {
 
   replay_stall = 0;
 
-
 #ifdef free_on_oldest
 for (std::vector<shd_warp_t *>::const_iterator iter =
            m_next_cycle_prioritized_warps.begin();
@@ -2975,10 +3022,16 @@ for (std::vector<shd_warp_t *>::const_iterator iter =
 #ifdef TLB_on
           && (warp(warp_id).last_pc_decoded_streaming_test == 0) // TLB check added
 #endif
-          #ifdef IB_OOO_FULL
+#ifdef IB_OOO_FULL
+#ifndef branch_prediction
             && (warp(warp_id).get_control_bit_in_order(inst_loc) == 0) // control_inst_Ishita
             && !(pI->branching_inst && warp(warp_id).get_predicate(inst_loc) > 0) // predicate_check_Ishita
-          #endif 
+#endif
+#ifdef GhOSTPrecise
+// make sure non idempotent instructions do not issue till all loads have done TLB check
+          &&(!(warp(warp_id).getIdempotent(inst_loc) && (warp(warp_id).getPrioirLoads(inst_loc) > 0)))
+#endif 
+#endif
           )
           {
             SCHED_DPRINTF(
@@ -3965,6 +4018,7 @@ while (g
             comp_data_stall = 1;
           }
 
+
           // Do not issue mem inst ooo if store is in the DEB
           #ifdef IB_OOO_FULL
           if(warp(warp_id).stalled_on_replay == -1 && replay_index == 0)
@@ -4122,10 +4176,15 @@ while (g
 #ifdef TLB_on
             && (warp(warp_id).last_pc_decoded_streaming_test == 0)
 #endif
-            #ifdef IB_OOO_FULL
+#ifdef IB_OOO_FULL
+#ifndef branch_prediction
               && (warp(warp_id).get_control_bit_in_order(inst_loc) == 0) // control_inst_Ishita
               && !(pI->branching_inst && warp(warp_id).get_predicate(inst_loc) > 0) // predicate_check_Ishita
-            #endif
+#endif
+#ifdef GhOSTPrecise
+    &&(!(warp(warp_id).getIdempotent(inst_loc) && (warp(warp_id).getPrioirLoads(inst_loc) > 0)))
+#endif 
+#endif
             )
           {
             SCHED_DPRINTF(
@@ -4809,7 +4868,7 @@ void shader_core_ctx::warp_inst_complete(const warp_inst_t &inst) {
     m_stats->m_num_mem_committed[m_sid]++;
 
   // if(inst.op == LOAD_OP)
-  //   std::cout<<"INST_ISSUE_CYCLE "<<inst.pc<<" "<<inst.warp_id()<<" "<<(cycles_passed-inst.get_cycle_issued())<<"\n";
+  //  std::cout<<"INST_ISSUE_CYCLE "<<inst.pc<<" "<<inst.warp_id()<<" "<<(cycles_passed-inst.get_cycle_issued())<<"\n";
 
   //std::cout <<"INST_ISSUE_CYCLE "<<inst.pc<<" "<<inst.op<<" "<<(cycles_passed-inst.get_cycle_issued())<<"\n";
 
@@ -4950,6 +5009,15 @@ bool ldst_unit::shared_cycle(warp_inst_t &inst, mem_stage_stall_type &rc_fail,
     m_stats->gpgpu_n_shmem_bank_access[m_sid]++;
   }
 
+#ifdef GhOSTPrecise
+  if(inst.checkedAtTLB == 0 && inst.op == LOAD_OP)
+  {
+    m_core->reduceLoadsToTLB(inst.get_wid());
+    inst.checkedAtTLB = 1;
+    m_core->reducePriorLoads(inst.get_wid());
+  }
+#endif
+
   bool stall = inst.dispatch_delay();
   if (stall) {
     fail_type = S_MEM;
@@ -5013,6 +5081,14 @@ mem_stage_stall_type ldst_unit::process_memory_access_queue(cache_t *cache,
       mf->get_addr(), mf,
       m_core->get_gpu()->gpu_sim_cycle + m_core->get_gpu()->gpu_tot_sim_cycle,
       events);
+#ifdef GhOSTPrecise
+  if(inst.checkedAtTLB == 0 && inst.op == LOAD_OP)
+  {
+    m_core->reduceLoadsToTLB(inst.get_wid());
+    inst.checkedAtTLB = 1;
+    m_core->reducePriorLoads(inst.get_wid());
+  }
+#endif
   return process_cache_access(cache, mf->get_addr(), inst, events, mf, status);
 }
 
@@ -5056,6 +5132,16 @@ mem_stage_stall_type ldst_unit::process_memory_access_queue_l1cache(
           m_core->set_stalled_on_TLB(inst.get_wid(),0);
         }
 #endif
+
+#ifdef GhOSTPrecise
+  if(inst.checkedAtTLB == 0 && inst.op == LOAD_OP)
+  {
+    m_core->reduceLoadsToTLB(inst.get_wid());
+    inst.checkedAtTLB = 1;
+    m_core->reducePriorLoads(inst.get_wid());
+  }
+#endif
+
       } else {
         result = BK_CONF;
         delete mf;
@@ -5258,6 +5344,15 @@ bool ldst_unit::memory_cycle(warp_inst_t &inst,
             assert(m_pending_writes[inst.warp_id()][inst.out[r]] > 0);
       } else if (inst.is_store())
         m_core->inc_store_req(inst.warp_id());
+#ifdef GhOSTPrecise
+  if(inst.checkedAtTLB == 0 && inst.op == LOAD_OP)
+  {
+    m_core->reduceLoadsToTLB(inst.get_wid());
+    inst.checkedAtTLB = 1;
+    m_core->reducePriorLoads(inst.get_wid());
+  }
+#endif
+    
     }
   } else {
     assert(CACHE_UNDEFINED != inst.cache_op);

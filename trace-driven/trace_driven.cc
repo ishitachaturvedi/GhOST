@@ -223,9 +223,7 @@ bool trace_warp_inst_t::parse_from_trace_struct(
 
   branching_inst = (!(bra_check.compare(opcode1))) && active_mask!= 0;
 
-#ifndef branch_prediction
   predicate_inst = (opcode1.find(predicate_set) != std::string::npos);
-#endif
 
   no_stall_control_inst = (opcode1.find(bssy_check) != std::string::npos) || (opcode1.find(bsync_check) != std::string::npos)
                       || (opcode1.find(BMOV_set) != std::string::npos) || (opcode1.find(BREAK_set) != std::string::npos) 

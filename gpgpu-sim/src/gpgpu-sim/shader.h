@@ -147,6 +147,7 @@ class shd_warp_t {
     replay_buffer_tail = 0;	
     replay_buffer_store_inst = 0;	
     replay_buffer_memory_inst = 0;	
+    load_to_TLB = 0;
     ib_replay_buffer_tail_DEB_OOO = 0;	
     ibuffer_tail = 0;	
     ibuffer_tail_full_OOO = 0;	
@@ -207,6 +208,7 @@ class shd_warp_t {
     replay_buffer_tail = 0;	
     replay_buffer_store_inst = 0;	
     replay_buffer_memory_inst = 0;	
+    load_to_TLB = 0;
     ib_replay_buffer_tail_DEB_OOO = 0;	
     ibuffer_tail = 0;	
     ibuffer_tail_full_OOO = 0;	
@@ -451,7 +453,7 @@ class shd_warp_t {
     stop_fetching_when_inst_0 = 0;
   }
 
-  void ibuffer_fill_OOO(unsigned slot, const warp_inst_t *pI, int PC,int tail,int tail_full_OOO, int num_stores,int warp, int mem_count, int m_control_count, int cycle, int predicate_inst, int inst_counter) {	
+  void ibuffer_fill_OOO(unsigned slot, const warp_inst_t *pI, int PC,int tail,int tail_full_OOO, int num_stores,int warp, int mem_count, int m_control_count, int cycle, int predicate_inst, int inst_counter, bool isNonIdempotent, int loadInsns) {	
     //assert(slot < IBUFFER_SIZE_IN_ORDER);	
     ibuffer_OOO[slot].m_inst = pI;	
     ibuffer_OOO[slot].m_valid = true;	
@@ -470,6 +472,8 @@ class shd_warp_t {
     ibuffer_OOO[slot].mem_dep = -1;
     ibuffer_OOO[slot].m_pushed_out = 0;
     ibuffer_OOO[slot].m_inst_counter = inst_counter;
+    ibuffer_OOO[slot].isIdempotent = isNonIdempotent;
+    ibuffer_OOO[slot].priorLoads = loadInsns;
   }
 
 //issue_warp_push_in_DEB_IB_OOO
@@ -491,7 +495,28 @@ class shd_warp_t {
     ibuffer_OOO[slot].mem_dep = ibuffer_OOO[index].mem_dep;
     ibuffer_OOO[slot].control_check_in_order = ibuffer_OOO[index].control_check_in_order;
     ibuffer_OOO[slot].m_inst_counter = ibuffer_OOO[index].m_inst_counter;
+    ibuffer_OOO[slot].isIdempotent = ibuffer_OOO[index].isIdempotent;
+    ibuffer_OOO[slot].priorLoads = ibuffer_OOO[index].priorLoads;
   }	
+
+  bool getIdempotent(int idx)
+  {
+    return ibuffer_OOO[idx].isIdempotent;
+  }
+
+  int getPrioirLoads(int idx)
+  {
+    return ibuffer_OOO[idx].priorLoads;
+  }
+
+  void reducePriorLoads()
+  {
+    int tot_size = ibuffer_OOO.size();
+    for (unsigned i = 0; i < tot_size ; i++)	
+    {
+      ibuffer_OOO[i].priorLoads--;
+    }
+  }
 
   int get_ibuffer_1_pc(int inst_loc)
   {
@@ -861,6 +886,8 @@ class shd_warp_t {
         ibuffer_OOO[i].m_pushed_in_OOO = 0;
         ibuffer_OOO[i].m_inst_number = 0;
         ibuffer_OOO[i].m_stall_cycles = -1;
+        ibuffer_OOO[i].isIdempotent = 0;
+        ibuffer_OOO[i].priorLoads = 0;
       }
     }	
     ibuffer_store_inst = 0;
@@ -871,6 +898,8 @@ class shd_warp_t {
     inst_counter = 0;
     predicate_inst = 0;
     stalls_for_inst = 0;
+    replay_buffer_memory_inst = 0;
+    load_to_TLB = 0;
   }	
 
   void ibuffer_flush_OOO_in_OOO() {	
@@ -895,6 +924,8 @@ class shd_warp_t {
         ibuffer_OOO[i].m_pushed_in_OOO = 0;
         ibuffer_OOO[i].m_inst_number = 0;
         ibuffer_OOO[i].m_stall_cycles = -1;
+        ibuffer_OOO[i].isIdempotent = 0;
+        ibuffer_OOO[i].priorLoads = 0;
       }
     }	
     ibuffer_store_inst = 0;
@@ -905,6 +936,8 @@ class shd_warp_t {
     inst_counter = 0;
     predicate_inst = 0;
     stalls_for_inst = 0;
+    replay_buffer_memory_inst = 0;
+    load_to_TLB = 0;
   }	
 
   int get_store_inst_OOO(int slot)
@@ -1015,6 +1048,8 @@ class shd_warp_t {
     ibuffer_OOO[index].m_inst_number = 0;
     ibuffer_OOO[index].m_stall_cycles = -1;
     ibuffer_OOO[index].m_inst_counter = -1;
+    ibuffer_OOO[index].isIdempotent = 0;
+    ibuffer_OOO[index].priorLoads = 0;
   }	
 
 
@@ -1035,6 +1070,8 @@ class shd_warp_t {
     ibuffer_OOO[index].m_pushed_in_OOO = 0;
     ibuffer_OOO[index].m_inst_number = 0;
     ibuffer_OOO[index].m_stall_cycles = -1;
+    ibuffer_OOO[index].isIdempotent = 0;
+    ibuffer_OOO[index].priorLoads = 0;
     //ibuffer_OOO[index].m_inst_counter = -1;
   }	
 
@@ -1386,6 +1423,21 @@ class shd_warp_t {
   void ibuffer_increment_predicate_inst()
   {
     predicate_inst++;
+  }
+
+  void increaseLoadToTLB()
+  {
+    load_to_TLB++;
+  }
+
+  int getLoadToTLB()
+  {
+    return load_to_TLB;
+  }
+
+  void reduceInstToTLB()
+  {
+    load_to_TLB--;
   }
 
   int get_stalls_for_inst()
@@ -1780,6 +1832,8 @@ class shd_warp_t {
       control_check_in_order = 0;
       m_stall_cycles = -1;
       mem_dep = -1;
+      isIdempotent = 0;
+      priorLoads = 0;
     }	
     const warp_inst_t *m_inst;	
     bool m_valid;	
@@ -1799,6 +1853,8 @@ class shd_warp_t {
     long long m_inst_counter;
     int m_inst_number;
     int m_stall_cycles;
+    bool isIdempotent;
+    int priorLoads;
   };	
 
   struct replay_buffer_entry_mem {	
@@ -1871,7 +1927,7 @@ class shd_warp_t {
   unsigned ib_replay_buffer_tail_DEB_OOO;
   unsigned replay_buffer_store_inst;
   unsigned replay_buffer_memory_inst;
-
+  int load_to_TLB;
   unsigned ibuffer_tail;
   unsigned ibuffer_tail_full_OOO;
   unsigned ibuffer_store_inst;
@@ -1909,7 +1965,7 @@ inline unsigned wid_from_hw_tid(unsigned tid, unsigned warp_size) {
   return tid / warp_size;
 };
 
-const unsigned WARP_PER_CTA_MAX = 64;
+const unsigned WARP_PER_CTA_MAX = 128;
 typedef std::bitset<WARP_PER_CTA_MAX> warp_set_t;
 
 int register_bank(int regnum, int wid, unsigned num_banks,
@@ -3720,6 +3776,12 @@ class shader_core_ctx : public core_t {
   int get_stalled_on_TLB(int wid) {return m_warp[wid]->last_pc_decoded_streaming_test; }
 
   void set_stalled_on_TLB(int wid, int val) { m_warp[wid]->last_pc_decoded_streaming_test = val; }
+
+  void reduceLoadsToTLB(int wid) { m_warp[wid]->reduceInstToTLB(); }
+
+  int getLoadToTLB(int wid) { return m_warp[wid]->getLoadToTLB(); }
+
+  void reducePriorLoads(int wid) { m_warp[wid]->reducePriorLoads(); }
 
   // used by functional simulation:
   // modifiers

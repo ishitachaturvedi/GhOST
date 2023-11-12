@@ -81,6 +81,11 @@ class Scoreboard {
   bool pendingWritesMem(unsigned wid) const;
   bool pendingWritesComp(unsigned wid) const;
 
+  void releaseAllBBRegs(int wid);
+  void addWriteRegs(const class warp_inst_t* inst, int wid);
+
+  bool checkIsIdempotent(unsigned wid, const class inst_t* inst) const;
+
   void RenameRegs(unsigned wid, class inst_t* inst, bool print, bool reg_renaming,std::vector<const warp_inst_t *> replayInst);
 
   std::vector<int> checkCollisionMem(unsigned wid, const inst_t *inst) const;
@@ -98,6 +103,7 @@ class Scoreboard {
 
  private:
   void reserveRegister(unsigned wid, unsigned regnum, bool gpgpu_perfect_mem_data, int pc, int m_cluster_id, int sid, int stalls_between_issues, int inst_num);
+  void addWriteReg(unsigned wid, unsigned regnum);
   void reserveRegisterWAR(unsigned wid, unsigned regnum, bool gpgpu_perfect_mem_data, int pc, int m_cluster_id, int sid, int stalls_between_issues, int inst_num);
   int get_sid() const { return m_sid; }
 
@@ -109,6 +115,7 @@ class Scoreboard {
   //std::vector<std::set<unsigned> > reg_table_WAR;
   std::vector<std::set<unsigned> > addr_table;
   std::vector<std::set<unsigned> > reg_table_all_regs_used_list;
+  std::vector<std::set<unsigned> > write_regs_in_BB;
   // Register that depend on a long operation (global, local or tex memory)
   std::vector<std::set<unsigned> > longopregs;
 

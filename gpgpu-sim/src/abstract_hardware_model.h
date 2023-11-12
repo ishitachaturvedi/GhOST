@@ -488,7 +488,7 @@ const unsigned long long LOCAL_MEM_SIZE_MAX = 1 << 14;
 // Volta Titan V has 80 SMs
 const unsigned MAX_STREAMING_MULTIPROCESSORS = 80;
 // Max 2048 threads / SM
-const unsigned MAX_THREAD_PER_SM = 1 << 11;
+const unsigned MAX_THREAD_PER_SM = 1 << 12;
 // MAX 64 warps / SM
 const unsigned MAX_WARP_PER_SM = 1 << 6;
 const unsigned long long TOTAL_LOCAL_MEM_PER_SM =
@@ -1096,6 +1096,7 @@ class warp_inst_t : public inst_t {
     m_cluster_id = -1;	
     m_pc = -1;
     cycle_issued = -1;
+    checkedAtTLB = 0;
   }
   virtual ~warp_inst_t() {}
 
@@ -1274,6 +1275,7 @@ class warp_inst_t : public inst_t {
   unsigned m_stalled_cycles;	
   unsigned m_inst_number;	
   bool m_empty;
+  int checkedAtTLB;
   //int m_issue_index;
 
  protected:

@@ -65,6 +65,7 @@ Scoreboard::Scoreboard(unsigned sid, unsigned n_warps, class gpgpu_t* gpu)
   reg_table_all_regs_used_list.resize(n_warps);
   arch_reg.resize(n_warps);
   physical_reg.resize(n_warps);
+  write_regs_in_BB.resize(n_warps);
   m_gpu = gpu;
   //last_physical_reg = 3000;
   last_physical_reg.resize(n_warps,3000);
@@ -127,6 +128,11 @@ void Scoreboard::reserveRegister(unsigned wid, unsigned regnum, bool gpgpu_perfe
   reg_table_all_regs_used[wid][regnum] = 1;
   if (reg_table_all_regs_used_list[wid].find(regnum) == reg_table_all_regs_used_list[wid].end())
     reg_table_all_regs_used_list[wid].insert(regnum);
+}
+
+
+void Scoreboard::addWriteReg(unsigned wid, unsigned regnum) {
+  write_regs_in_BB[wid].insert(regnum);
 }
 
 void Scoreboard::reserveRegisterWAR(unsigned wid, unsigned regnum, bool gpgpu_perfect_mem_data, int pc, int m_cluster_id, int sid, int stalls_between_issues, int inst_num) {
@@ -239,6 +245,15 @@ void Scoreboard::reserveRegisters(const class warp_inst_t* inst, bool gpgpu_perf
   }
 }
 
+void Scoreboard::addWriteRegs(const class warp_inst_t* inst, int wid)
+{
+    for (unsigned r = 0; r < MAX_OUTPUT_VALUES; r++) {
+      if (inst->out[r] > 0) {
+        addWriteReg(wid, inst->out[r]);
+    }
+  }
+}
+
 // Release registers for an instruction
 void Scoreboard::releaseRegisters(const class warp_inst_t* inst) {
   for (unsigned r = 0; r < MAX_OUTPUT_VALUES; r++) {
@@ -262,6 +277,10 @@ void Scoreboard::releaseRegisters(const class warp_inst_t* inst) {
   // }
 
   
+}
+
+void Scoreboard::releaseAllBBRegs(int wid) {
+  write_regs_in_BB[wid].clear();
 }
 
 void Scoreboard::RenameRegs(unsigned wid, class inst_t* inst, bool print, bool reg_renaming,std::vector<const warp_inst_t *> replayInst) {
@@ -398,6 +417,25 @@ bool Scoreboard::checkCollision(unsigned wid, const class inst_t* inst, bool pri
     }
   }
   return false;
+}
+
+bool Scoreboard::checkIsIdempotent(unsigned wid, const class inst_t* inst) const {
+  std::set<int> inst_regs;
+
+  for (unsigned iii = 0; iii < inst->outcount; iii++)
+  {
+    inst_regs.insert(inst->out[iii]);
+  }
+
+  std::set<int>::iterator it2;
+  for (it2 = inst_regs.begin(); it2 != inst_regs.end(); it2++)
+  {
+    if (write_regs_in_BB[wid].find(*it2) != write_regs_in_BB[wid].end()) {
+      return true;
+    }
+  }
+  return false;
+
 }
 
 void Scoreboard::reg_values(unsigned wid) const {
