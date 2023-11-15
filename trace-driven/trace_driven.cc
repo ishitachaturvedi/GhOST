@@ -54,6 +54,7 @@
 #include "option_parser.h"
 #include "trace_driven.h"
 #include "../definition.h"
+#include "../gpgpu-sim/src/gpgpu-sim/fast.h"
 
 const trace_warp_inst_t *trace_shd_warp_t::get_next_trace_inst() {
   if (trace_pc < warp_traces.size()) {

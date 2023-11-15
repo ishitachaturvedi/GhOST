@@ -73,11 +73,7 @@ Scoreboard::Scoreboard(unsigned sid, unsigned n_warps, class gpgpu_t* gpu)
   // set reg names across warps to push and pop from free list
   for(int i = 0; i<free_regs.size(); i++)
   {
-    for (int j = 0;j<3000; j++)
-    {
-      int val = 3000 + j;
-      free_regs[i].push(val);
-    }
+    free_regs[i].push_back(0);
   }
 }
 
@@ -155,7 +151,6 @@ void Scoreboard::reserveRegisterWAR(unsigned wid, unsigned regnum, bool gpgpu_pe
 // Unmark register as write-pending
 void Scoreboard::releaseRegister(unsigned wid, unsigned regnum) {
   if (!(reg_table[wid].find(regnum) != reg_table[wid].end())) return;
-  free_regs[wid].push(regnum);
   SHADER_DPRINTF(SCOREBOARD, "Release register - warp:%d, reg: %d\n", wid,
                  regnum);
   reg_table[wid].erase(regnum);
@@ -318,6 +313,22 @@ void Scoreboard::RenameRegs(unsigned wid, class inst_t* inst, bool print, bool r
       inst_replay_regs.insert(ins->in[jjj]);
   }
 
+  // if(wid == 2 && (replayInst.size() > 0) && replayInst[0]->get_sid() == 1)
+  // {
+  //   std::cout<<"************************\n";
+  //   std::cout<<"Orig_inst "<<std::hex<<inst->pc<<std::dec<<" write_reg ";
+  //   for (unsigned iii = 0; iii < inst->outcount; iii++)
+  //   {
+  //     std::cout<<inst->out[iii]<<" ";
+  //   }
+  //   std::cout<<" read_reg ";
+  //   for (unsigned iii = 0; iii < inst->incount; iii++)
+  //   {
+  //     std::cout<<inst->in[iii]<<" ";
+  //   }
+  //   std::cout<<"\n";
+  // }
+
   // check if a src register has been renamed, and rename it in the inst->in set as well
   int counter = 0;
   for (it2 = inst_regs_in.begin(); it2 != inst_regs_in.end(); it2++)
@@ -333,9 +344,8 @@ void Scoreboard::RenameRegs(unsigned wid, class inst_t* inst, bool print, bool r
     else
     {
       arch_reg[wid].push_back(inst->in[counter]);
-      int physical_reg_num = free_regs[wid].front();
-      free_regs[wid].pop();
-      //physical_reg[wid].push_back(last_physical_reg[wid]);
+      int physical_reg_num = free_regs[wid][0];
+      free_regs[wid][0]++;
       physical_reg[wid].push_back(physical_reg_num);
       inst->in[counter] = physical_reg_num;
     }
@@ -355,10 +365,10 @@ void Scoreboard::RenameRegs(unsigned wid, class inst_t* inst, bool print, bool r
       int index = it - arch_reg[wid].begin();
       if ((reg_table[wid].find(physical_reg[wid][index]) != reg_table[wid].end()) || (inst_replay_regs.find(physical_reg[wid][index]) != inst_replay_regs.end()))
       {
-        int physical_reg_num = free_regs[wid].front();
+        int physical_reg_num = free_regs[wid][0];
         physical_reg[wid][index] = physical_reg_num;
         inst->out[counter] = physical_reg_num;
-        free_regs[wid].pop();
+        free_regs[wid][0]++;
       }
       else
       {
@@ -368,14 +378,30 @@ void Scoreboard::RenameRegs(unsigned wid, class inst_t* inst, bool print, bool r
     // mapping does not exit, add it
     else
     {
-      int physical_reg_num = free_regs[wid].front();
-      free_regs[wid].pop();
+      int physical_reg_num = free_regs[wid][0];
+      free_regs[wid][0]++;
       arch_reg[wid].push_back(inst->out[counter]);
       physical_reg[wid].push_back(physical_reg_num);
       inst->out[counter] = physical_reg_num;
     }
     counter++;
   }
+
+  // if(wid == 2  && (replayInst.size() > 0) && replayInst[0]->get_sid() == 1)
+  // {
+  //   std::cout<<"Renamed_inst "<<inst->pc<<" write_reg ";
+  //   for (unsigned iii = 0; iii < inst->outcount; iii++)
+  //   {
+  //     std::cout<<inst->out[iii]<<" ";
+  //   }
+  //   std::cout<<" read_reg ";
+  //   for (unsigned iii = 0; iii < inst->incount; iii++)
+  //   {
+  //     std::cout<<inst->in[iii]<<" ";
+  //   }
+  //   std::cout<<"\n";
+  // }
+
 
   inst->register_renamed = 1;
 
@@ -498,7 +524,9 @@ bool Scoreboard::check_WAR_or_WAW_replay(unsigned wid, const class inst_t* inst,
 
 
     for (unsigned jjj = 0; jjj < ins->incount; jjj++)
+    {
       inst_replay_regs.insert(ins->in[jjj]);
+    }
   }
 
   // check for collision against replay queue instructions
@@ -1074,5 +1102,4 @@ bool Scoreboard::checkConsecutiveInstIndep(const class inst_t* inst, const class
   }
   return true;
 }
-
 

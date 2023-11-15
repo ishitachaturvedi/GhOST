@@ -2919,6 +2919,15 @@ for (std::vector<shd_warp_t *>::const_iterator iter =
         
           bool bypass_mem = false;
 
+          bool IB_is_full_OOO = false;
+          bool HAWS_ON_in_order =  false;
+          #ifdef IB_OOO_FULL
+            IB_is_full_OOO = true;
+          #endif
+
+          // for fully OOO Buffer only push here if it is a non memory sync instruction
+          bool can_push_inst_OOO = (IB_is_full_OOO && (inst_index == 0) && (m_shader->isSyncInstNonMemory(pI,int(warp_id))) &&  !warp(warp_id).get_control_bit(inst_loc));
+
           // check against replay queue as well if replay queue is enabled
 
           std::vector<const warp_inst_t *> replayInst;
@@ -2930,6 +2939,7 @@ for (std::vector<shd_warp_t *>::const_iterator iter =
           bool replay_coll_comp = false;
           bool replay_WAR_or_WAW_found = false;
           bool check_for_WAW_deps = false;
+
           if(!m_shader->m_config->gpgpu_reply_buffer)
             replay_collision = false;
           else
@@ -2948,7 +2958,8 @@ for (std::vector<shd_warp_t *>::const_iterator iter =
             replay_collision = m_scoreboard->checkReplayCollision(warp_id, pI,replayInst);
             repaly_coll_mem = m_scoreboard->checkReplayCollision(warp_id, pI,replayInstMem);
             replay_coll_comp = m_scoreboard->checkReplayCollision(warp_id, pI,replayInstComp);
-            replay_WAR_or_WAW_found = m_scoreboard->check_WAR_or_WAW_replay(warp_id, pI,replayInst);
+            if(((inst_index == 0) && (issued < max_issue)) && (!IB_is_full_OOO || can_push_inst_OOO))
+              replay_WAR_or_WAW_found = m_scoreboard->check_WAR_or_WAW_replay(warp_id, pI,replayInst);
 
             warp(warp_id).set_DEB_dep_bit(replay_collision);
           }
@@ -2967,26 +2978,6 @@ for (std::vector<shd_warp_t *>::const_iterator iter =
           if(ResComp[0] || replay_coll_comp){
             comp_data_stall = 1;
           }
-
-          bool IB_is_full_OOO = false;
-          bool HAWS_ON_in_order =  false;
-          #ifdef IB_OOO_FULL
-            IB_is_full_OOO = true;
-          #endif
-
-          #ifdef HAWS_ON
-            if(warp(warp_id).stall_points == 0)
-            {
-              HAWS_ON_in_order = true;
-            } 
-            else
-            {
-              HAWS_ON_in_order = false;
-            }
-          #endif
-
-          // for fully OOO Buffer only push here if it is a non memory sync instruction
-          bool can_push_inst_OOO = (IB_is_full_OOO && (inst_index == 0) && (m_shader->isSyncInstNonMemory(pI,int(warp_id))) &&  !warp(warp_id).get_control_bit(inst_loc));
 
           if(m_scoreboard->islongop_hold(warp_id, pI) && (warp(warp_id).stall_points == 0))
           {

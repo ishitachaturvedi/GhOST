@@ -130,7 +130,7 @@ class Scoreboard {
 
   std::vector<std::vector<int>> arch_reg; // registers which were renamed
   std::vector<std::vector<int>> physical_reg; // What the regs were renamed to 
-  std::vector<std::queue<int>> free_regs; // available registers- currently perfect reg renaming
+  std::vector<std::vector<int>> free_regs;
 
   std::vector<int> last_physical_reg; // last physical reg allocated
   //int last_physical_reg;
