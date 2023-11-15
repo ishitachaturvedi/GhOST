@@ -10,6 +10,7 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include "../gpgpu-sim/src/gpgpu-sim/fast.h"
 
 #include "trace_parser.h"
 
