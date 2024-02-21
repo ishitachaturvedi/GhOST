@@ -3585,6 +3585,7 @@ for (std::vector<shd_warp_t *>::const_iterator iter =
   // OOO Replay buffer // Issue_change
   if(m_shader->m_config->gpgpu_reply_buffer)
   {
+    int warp_checking = -1;
     int check_count = 0;
     // add new independent instructions for replay later
     for (int i = 0; i< indep_warp_num.size(); i++)
@@ -3621,7 +3622,7 @@ for (std::vector<shd_warp_t *>::const_iterator iter =
           }
           #endif
           #ifdef IB_OOO_FULL
-          if(((wb_warp_id == -1 || wb_warp_id == warp_num) && check_count == 0) || inst_idx == 0)
+          if(((wb_warp_id == -1 || wb_warp_id == warp_num) && check_count == 0) || inst_idx == 0 || warp_checking == warp_num)
           #endif
           {
             warp(warp_num).set_control_bit(inst_loc);
@@ -3629,6 +3630,7 @@ for (std::vector<shd_warp_t *>::const_iterator iter =
             check_count++;
             warp(warp_num).warp_wb = 0;
             warp(warp_num).ib_enter = 0;
+            warp_checking = warp_num;
           }
         }
       }
