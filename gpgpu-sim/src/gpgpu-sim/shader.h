@@ -165,6 +165,8 @@ class shd_warp_t {
     m_cdp_dummy = false;	
     num_inst_exec = 0;	
     num_warp_inst = 0;	
+    warp_wb = 0;
+    ib_enter = 0;
     warp_inst_retired = 0;	
     stalls_between_issues = 0;	
     stalled_on_replay = -1;	
@@ -194,6 +196,8 @@ class shd_warp_t {
     m_cdp_dummy = false;
     num_inst_exec = 0;	
     num_warp_inst = 0;	
+    warp_wb = 0;
+    ib_enter = 0;
     num_inst_exec_warp = 0;	
     replay_m_next = 0;		
     replay_m_fill_next = 0;		
@@ -1956,6 +1960,8 @@ class shd_warp_t {
   unsigned num_warp_inst;
   bool warp_inst_retired;
   bool stop_fetching_when_inst_0;
+  bool warp_wb;
+  bool ib_enter = 0;
 };
 
 inline unsigned hw_tid_from_wid(unsigned wid, unsigned warp_size, unsigned i) {
@@ -3801,6 +3807,10 @@ class shader_core_ctx : public core_t {
   void dec_inst_in_pipeline(unsigned warp_id) {
     m_warp[warp_id]->dec_inst_in_pipeline();
   }  // also used in writeback()
+  int set_wb(unsigned warp_id) {
+    return m_warp[warp_id]->warp_wb = 1; 
+  }
+
   void store_ack(class mem_fetch *mf);
   bool warp_waiting_at_mem_barrier(unsigned warp_id);
   void set_max_cta(const kernel_info_t &kernel);

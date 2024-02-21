@@ -952,6 +952,7 @@ void shader_core_ctx::PutInstInIB2(int warp_id)
 #ifdef GhOSTPrecise
       isNonIdempotent = m_scoreboard->checkIsIdempotent(warp_id, pI) && !(pI->op == LOAD_OP);
 #endif
+      m_warp[warp_id]->ib_enter = 1;
       // add values and get stats
       tail = m_warp[warp_id]->ibuffer_get_tail_full_OOO();
       tail_full_OOO = m_warp[warp_id]->ibuffer_get_tail_full_OOO();
@@ -2590,6 +2591,8 @@ void scheduler_unit::cycle_ibuffer_OOO(int m_cluster_id, int sched_num) {
 
   replay_stall = 0;
 
+  int wb_warp_id = -1;
+
 #ifdef free_on_oldest
 for (std::vector<shd_warp_t *>::const_iterator iter =
            m_next_cycle_prioritized_warps.begin();
@@ -3309,6 +3312,8 @@ for (std::vector<shd_warp_t *>::const_iterator iter =
             && !(m_shader->isSyncInstNonMemory(pI,int(warp_id)))
             && !((inst_index>0) && !warp(warp_id).get_control_bit_prev_full_OOO(inst_index-1))
             //&&  !(std::count(indep_warp_num.begin(), indep_warp_num.end(), warp_id)) // Issue_change only 1 inst placed as ready for issue change1 change_Ishita
+            // check if no instruction with control inst 1, or WB bit it set ISHITA_CHECK
+            && ((warp(warp_id).warp_wb == 1 || warp(warp_id).get_control_bit_prev(1) == 0 || warp(warp_id).ib_enter == 1) || inst_index == 0)
           )
           {
             indep_instructions.push_back(pI);
@@ -3317,7 +3322,9 @@ for (std::vector<shd_warp_t *>::const_iterator iter =
             indep_inst_loc.push_back(inst_loc);
             indep_inst_index.push_back(inst_index);
             indep_active_mask.push_back(m_shader->get_active_mask(warp_id, pI));
-
+            if(warp(warp_id).warp_wb == 1) {
+              wb_warp_id = warp_id;
+            }
             // // Issue_change
             // #ifndef IB_OOO_FULL
             // int id = m_shader->m_warp[indep_warp_num[i]]->ibuffer_empty_idx_DEB_OOO();
@@ -3578,6 +3585,7 @@ for (std::vector<shd_warp_t *>::const_iterator iter =
   // OOO Replay buffer // Issue_change
   if(m_shader->m_config->gpgpu_reply_buffer)
   {
+    int check_count = 0;
     // add new independent instructions for replay later
     for (int i = 0; i< indep_warp_num.size(); i++)
     {
@@ -3612,8 +3620,16 @@ for (std::vector<shd_warp_t *>::const_iterator iter =
             warp(warp_num).place_inst_in_IB(inst_loc, pI1);
           }
           #endif
+          #ifdef IB_OOO_FULL
+          if(((wb_warp_id == -1 || wb_warp_id == warp_num) && check_count == 0) || inst_idx == 0)
+          #endif
+          {
             warp(warp_num).set_control_bit(inst_loc);
             m_shader->issue_warp_push_in_DEB_IB_OOO(pI,active_mask,warp_num,m_id,id,pc_num,m_shader->get_sid(),m_cluster_id,tail,inst_loc,inst_idx);
+            check_count++;
+            warp(warp_num).warp_wb = 0;
+            warp(warp_num).ib_enter = 0;
+          }
         }
       }
     }
@@ -4980,6 +4996,7 @@ void shader_core_ctx::writeback() {
     unsigned warp_id = pipe_reg->warp_id();
     m_scoreboard->releaseRegisters(pipe_reg);
     m_warp[warp_id]->dec_inst_in_pipeline();
+    m_warp[warp_id]->warp_wb = 1;
     warp_inst_complete(*pipe_reg);
     m_gpu->gpu_sim_insn_last_update_sid = m_sid;
     m_gpu->gpu_sim_insn_last_update = m_gpu->gpu_sim_cycle;
@@ -5992,6 +6009,7 @@ void ldst_unit::cycle() {
         if (!pending_requests) {
           m_core->warp_inst_complete(*m_dispatch_reg);
           m_scoreboard->releaseRegisters(m_dispatch_reg);
+          m_core->set_wb(warp_id);
         }
         m_core->dec_inst_in_pipeline(warp_id);
         m_dispatch_reg->clear();
