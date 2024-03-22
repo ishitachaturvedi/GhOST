@@ -74,8 +74,15 @@ branch_prediction_ON ?= 0
 # Turns on GhOSTPrecise
 GhOSTPrecise_ON ?= 0
 
+# turns on print statements to print load/store latency
+printLDSTLatency_ON ?= 0
+
 # free the instruction buffer entry only if it is the oldest instruction in the issue buffer and has written back turns on free_on_oldest
 free_on_oldest_ON ?= 0
+
+ifeq ($(printLDSTLatency_ON), 1)
+    CXXFLAGS += -DprintLDSTLatency=1
+endif
 
 ifeq ($(OoO_ON), 1)
     CXXFLAGS += -DIB_OOO_FULL=1

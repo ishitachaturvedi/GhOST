@@ -1649,7 +1649,9 @@ void shader_core_ctx::issue_warp_ibuffer_OOO_in_order(register_set &pipe_reg_set
   m_warp[warp_id]->set_inst_in_or_OOO(index_loc,2);
 #endif
  
-  //std::cout <<"INST_ISSUE_CYCLE_IN_ORDER "<<next_inst->pc<<" "<<next_inst->op<<" "<<(cycles_passed-m_warp[warp_id]->get_stall_cycle(index_loc))<<"\n";
+// #ifdef printLDSTLatency
+//   std::cout <<"INST_ISSUE_CYCLE_IN_ORDER "<<next_inst->pc<<" "<<next_inst->op<<" "<<(cycles_passed-m_warp[warp_id]->get_stall_cycle(index_loc))<<"\n";
+// #endif 
 #ifdef IB_OOO_FULL
   // check if instruction is a branch inst, if yes, reduce the branch inst counter
   if(next_inst->op == BRANCH_OP || next_inst->branching_inst == 1)
@@ -1809,8 +1811,9 @@ void shader_core_ctx::issue_warp_push_from_replay_DEB_IB_OOO(register_set &pipe_
 #ifdef free_on_oldest
   m_warp[warp_id]->set_inst_in_or_OOO(index_loc,3);
 #endif
-
-  //std::cout <<"INST_ISSUE_CYCLE_OOO "<<next_inst->pc<<" "<<next_inst->op<<" "<<(cycles_passed-m_warp[warp_id]->get_stall_cycle(index_loc))<<"\n";
+// #ifdef printLDSTLatency
+//   std::cout <<"INST_ISSUE_CYCLE_OOO "<<next_inst->pc<<" "<<next_inst->op<<" "<<(cycles_passed-m_warp[warp_id]->get_stall_cycle(index_loc))<<"\n";
+// #endif
 #ifdef IB_OOO_FULL
   // check if instruction is a branch inst, if yes, reduce the branch inst counter
   if(next_inst->op == BRANCH_OP || next_inst->branching_inst == 1)
@@ -4877,10 +4880,13 @@ void shader_core_ctx::warp_inst_complete(const warp_inst_t &inst) {
   else if (inst.op_pipe == MEM__OP)
     m_stats->m_num_mem_committed[m_sid]++;
 
-  // if(inst.op == LOAD_OP)
-  //  std::cout<<"INST_ISSUE_CYCLE "<<inst.pc<<" "<<inst.warp_id()<<" "<<(cycles_passed-inst.get_cycle_issued())<<"\n";
+#ifdef printLDSTLatency
+  if(inst.op == LOAD_OP)
+   std::cout<<"INST_ISSUE_CYCLE "<<inst.pc<<" "<<inst.warp_id()<<" "<<(cycles_passed-inst.get_cycle_issued())<<"\n";
+#endif
 
   //std::cout <<"INST_ISSUE_CYCLE "<<inst.pc<<" "<<inst.op<<" "<<(cycles_passed-inst.get_cycle_issued())<<"\n";
+
 
   if(inst.op == BRANCH_OP || inst.op == SPECIALIZED_UNIT_1_OP)
     branch_insts++;
