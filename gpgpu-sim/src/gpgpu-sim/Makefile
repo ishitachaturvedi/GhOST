@@ -31,11 +31,17 @@
 DEBUG?=0
 TRACE?=0
 
+
+# TWO_STAGE_IB=1
+# IB_OOO_FULL=1
+
 ifeq ($(DEBUG),1)
 	CXXFLAGS = -Wall -DDEBUG
 else
 	CXXFLAGS = -Wall
 endif
+
+# CXXFLAGS += -DIB_OOO_FULL -DTWO_STAGE_IB
 
 ifeq ($(TRACE),1)
 	CXXFLAGS += -DTRACING_ON=1
@@ -53,7 +59,44 @@ else
 	CXXFLAGS += 
 endif
 
-CXXFLAGS += -I$(CUDA_INSTALL_PATH)/include
+CXXFLAGS += -I$(CUDA_INSTALL_PATH)/include 
+
+# for OoO execution
+# Turns on IB_OOO_FULL, TWO_STAGE_IB
+OoO_ON ?= 0
+
+# Turns on RENAME_REGS
+RENAME_REGS_ON ?= 0
+
+# branch prediction Turns on branch_prediction
+branch_prediction_ON ?= 0
+
+# Turns on GhOSTPrecise
+GhOSTPrecise_ON ?= 0
+
+# free the instruction buffer entry only if it is the oldest instruction in the issue buffer and has written back turns on free_on_oldest
+free_on_oldest_ON ?= 0
+
+ifeq ($(OoO_ON), 1)
+    CXXFLAGS += -DIB_OOO_FULL=1
+	CXXFLAGS += -DTWO_STAGE_IB=1
+endif
+
+ifeq ($(RENAME_REGS_ON), 1)
+    CXXFLAGS += -DRENAME_REGS=1
+endif
+
+ifeq ($(branch_prediction_ON), 1)
+    CXXFLAGS += -Dbranch_prediction=1
+endif
+
+ifeq ($(GhOSTPrecise_ON), 1)
+    CXXFLAGS += -DGhOSTPrecise=1
+endif
+
+ifeq ($(free_on_oldest_ON), 1)
+    CXXFLAGS += -Dfree_on_oldest=1
+endif
 
 #POWER_FLAGS=
 #ifneq ($(GPGPUSIM_POWER_MODEL),)
@@ -61,7 +104,7 @@ POWER_FLAGS = -I$(GPGPUSIM_POWER_MODEL) -DGPGPUSIM_POWER_MODEL
 #endif
 
 OPTFLAGS += -g3 -fPIC
-OPTFLAGS += -DCUDART_VERSION=$(CUDART_VERSION)
+OPTFLAGS += -DCUDART_VERSION=$(CUDART_VERSION) 
 
 CPP = g++ $(SNOW)
 OEXT = o
