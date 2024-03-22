@@ -3,13 +3,13 @@
 #define trace_driven
 
 // for OoO execution
-#define IB_OOO_FULL	
-#define TWO_STAGE_IB
+// #define IB_OOO_FULL	
+// #define TWO_STAGE_IB
 
-//#define RENAME_REGS
+// #define RENAME_REGS
 
-// branch prediction
-//#define branch_prediction
+// // branch prediction
+// #define branch_prediction
 
 //#define GhOSTPrecise
 
