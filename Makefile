@@ -29,10 +29,10 @@
 #BIN_DIR=./bin/release/$(ACCELSIM_CONFIG)
 BIN_DIR=./bin/release/accel-sim.out
 BUILD_DIR=./build/$(ACCELSIM_CONFIG)
-BIN_DIR_IN_ORDER=./bin/release/accel-sim-in-order.out
-BIN_DIR_OOO_ORDER=./bin/release/accel-sim-ooo.out
-BIN_DIR_LDLAT=./bin/release/accel-sim-ldlat.out
-BIN_DIR_GP=./bin/release/accel-sim-gp.out
+# BIN_DIR_IN_ORDER=./bin/release/accel-sim-in-order.out
+# BIN_DIR_OOO_ORDER=./bin/release/accel-sim-ooo.out
+# BIN_DIR_LDLAT=./bin/release/accel-sim-ldlat.out
+# BIN_DIR_GP=./bin/release/accel-sim-gp.out
 
 include version_detection.mk
 
