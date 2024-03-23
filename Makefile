@@ -27,7 +27,7 @@
 
 #BIN_DIR=./bin/SIB4/release/$(ACCELSIM_CONFIG)
 #BIN_DIR=./bin/release/$(ACCELSIM_CONFIG)
-BIN_DIR=./bin/release/accel-sim.out
+BIN_DIR=./bin/release
 BUILD_DIR=./build/$(ACCELSIM_CONFIG)
 # BIN_DIR_IN_ORDER=./bin/release/accel-sim-in-order.out
 # BIN_DIR_OOO_ORDER=./bin/release/accel-sim-ooo.out
